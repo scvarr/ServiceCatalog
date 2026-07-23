@@ -14,6 +14,11 @@
       {% elif column.key == "code" %}{{ service.code }}
       {% elif column.key == "description" %}{{ service.description|default:"—" }}
       {% elif column.key == "is_active" %}{% if service.is_active %}Да{% else %}Нет{% endif %}
+      {% elif column.key == "contract_quantity" %}{% if service.contract_comparison %}{{ service.contract_comparison.contract_quantity|default:"—" }}{% else %}—{% endif %}
+      {% elif column.key == "actual_quantity" %}{% if service.contract_comparison %}{{ service.contract_comparison.actual_quantity }}{% else %}—{% endif %}
+      {% elif column.key == "contract_delta" %}{% if service.contract_comparison and service.contract_comparison.quantity_delta is not None %}{{ service.contract_comparison.quantity_delta }}{% else %}—{% endif %}
+      {% elif column.key == "contract_status" %}{% if service.contract_comparison %}<span class="comparison-status status-{{ service.contract_comparison.status }}">{{ service.contract_comparison.status_label }}</span>{% else %}Нет действующего договора{% endif %}
+      {% elif column.key == "composition_delta" %}{% if service.contract_comparison %}{{ service.contract_comparison.composition_delta }}{% else %}—{% endif %}
       {% endif %}
     </td>
     {% endfor %}

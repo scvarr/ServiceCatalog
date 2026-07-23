@@ -7,7 +7,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         catalog_models = {"instancetype", "instance", "service", "servicemembership"}
-        contract_models = {"contract", "contractserviceterm", "namedcontractposition", "contractlistimport"}
+        contract_models = {"contract", "contractserviceterm", "namedcontractposition", "contractlistimport", "contractactualsnapshot", "contractactualsnapshotservice", "contractactualsnapshotinstance"}
         specifications = {
             "Readers": (catalog_models | contract_models, {"view"}),
             "Editors": (catalog_models, {"view", "add", "change"}),

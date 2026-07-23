@@ -2,6 +2,7 @@
 {% block content %}
 <h1>{{ service.name }}</h1>
 <p>{{ service.description|default:"Описание отсутствует." }}</p>
+{% if active_contract %}<section class="comparison-card"><h2>Сравнение с действующим договором</h2>{% if contract_comparison %}<p><a href="{% url 'contracts:contract_detail' active_contract.pk %}">{{ active_contract.number }} — {{ active_contract.name }}</a> · {{ active_contract.start_date }} — {{ active_contract.end_date }}</p><p>Режим: {{ contract_comparison.term.get_accounting_mode_display }} · По договору: {{ contract_comparison.contract_quantity|default:"—" }} · Актуально: {{ contract_comparison.actual_quantity }} · <span class="comparison-status status-{{ contract_comparison.status }}">{{ contract_comparison.status_label }}</span></p>{% if contract_comparison.composition_changed %}<details><summary>Изменения состава: {{ contract_comparison.composition_delta }}</summary><p>Добавлено: {{ contract_comparison.added_count }}. Отсутствует: {{ contract_comparison.missing_count }}. Совпадает: {{ contract_comparison.matched_count }}.</p></details>{% endif %}<p><a href="{% url 'contracts:term_comparison' contract_comparison.term.pk %}">Открыть детальное сравнение</a></p>{% else %}<p>Для услуги нет договорной позиции в действующем договоре.</p>{% endif %}</section>{% endif %}
 <h2>Фактический состав</h2>
 {% include "catalog/includes/list_controls.html" %}
 <div class="table-wrap"><table class="data-table">

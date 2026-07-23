@@ -23,6 +23,11 @@ SERVICE_COLUMNS = (
     ListColumn("code", "Код"),
     ListColumn("description", "Описание"),
     ListColumn("is_active", "Активна"),
+    ListColumn("contract_quantity", "По договору"),
+    ListColumn("actual_quantity", "Актуально"),
+    ListColumn("contract_delta", "Расхождение"),
+    ListColumn("contract_status", "Статус по договору", default=True),
+    ListColumn("composition_delta", "Изменения состава"),
 )
 
 INSTANCE_COLUMNS = (

@@ -1,0 +1,2 @@
+{% extends "base.html" %}
+{% block content %}<h1>Новый проект договора</h1><form method="post" class="project-form">{% csrf_token %}{{ form.as_p }}<button type="submit">Создать проект</button></form>{% endblock %}

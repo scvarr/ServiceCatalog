@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ term.service }} — сравнение</h1>
-<p>Режим: {{ term.get_accounting_mode_display }}. Фактическое количество: {{ comparison.actual_count }}{% if comparison.upper_limit is not None %}; предельное: {{ comparison.upper_limit }}{% endif %}.</p>
+<p>Режим: {{ term.get_accounting_mode_display }} · Актуально: {{ comparison.actual_quantity }} · По договору: {{ comparison.contract_quantity|default:"—" }} · Расхождение: {{ comparison.quantity_delta|default:"—" }} · <span class="comparison-status status-{{ comparison.status }}">{{ comparison.status_label }}</span></p>
+{% if comparison.allowed_delta is not None %}<p>Допустимое превышение: {{ comparison.allowed_delta }}{% if comparison.percent_delta is not None %}; отклонение: {{ comparison.percent_delta|floatformat:2 }}%{% endif %}.</p>{% endif %}
 {% if term.accounting_mode != 'quantitative' and term.accounting_mode != 'none' %}
-<p><a href="{% url 'contracts:import_list' term.pk %}">Импортировать CSV</a></p>
-<h2>Совпавшие</h2><div class="table-wrap"><table class="data-table"><tr><th>Идентификатор</th><th>Экземпляр</th></tr>{% for item in comparison.matched %}<tr><td>{{ item.source_identifier }}</td><td>{{ item.instance }}</td></tr>{% empty %}<tr><td colspan="2">Нет</td></tr>{% endfor %}</table></div>
-<h2>Только в договоре</h2><div class="table-wrap"><table class="data-table"><tr><th>Идентификатор</th></tr>{% for item in comparison.contract_only %}<tr><td>{{ item.source_identifier }}</td></tr>{% empty %}<tr><td>Нет</td></tr>{% endfor %}</table></div>
-<h2>Только в фактическом составе</h2><div class="table-wrap"><table class="data-table"><tr><th>Экземпляр</th></tr>{% for item in comparison.actual_only %}<tr><td>{{ item }}</td></tr>{% empty %}<tr><td>Нет</td></tr>{% endfor %}</table></div>
-<h2>Несопоставленные</h2><div class="table-wrap"><table class="data-table"><tr><th>Идентификатор</th><th>Наименование</th></tr>{% for item in comparison.unmatched %}<tr><td>{{ item.source_identifier }}</td><td>{{ item.source_name }}</td></tr>{% empty %}<tr><td colspan="2">Нет</td></tr>{% endfor %}</table></div>
+{% if term.contract.status == "draft" %}<p><a href="{% url 'contracts:import_list' term.pk %}">Импортировать CSV</a></p>{% endif %}
+<h2>Добавлены после формирования договорного состава ({{ comparison.added_count }})</h2><div class="table-wrap"><table class="data-table"><tr><th>Код</th><th>Экземпляр</th></tr>{% for item in comparison.actual_only %}<tr><td>{{ item.catalog_code }}</td><td>{{ item.name }}</td></tr>{% empty %}<tr><td colspan="2">Нет</td></tr>{% endfor %}</table></div>
+<h2>Отсутствуют в актуальном составе ({{ comparison.missing_count }})</h2><div class="table-wrap"><table class="data-table"><tr><th>Идентификатор</th><th>Экземпляр</th></tr>{% for item in comparison.contract_only %}<tr><td>{{ item.source_identifier }}</td><td>{{ item.source_name }}</td></tr>{% empty %}<tr><td colspan="2">Нет</td></tr>{% endfor %}</table></div>
+<details><summary>Совпадают ({{ comparison.matched_count }})</summary><div class="table-wrap"><table class="data-table"><tr><th>Идентификатор</th><th>Экземпляр</th></tr>{% for item in comparison.matched %}<tr><td>{{ item.source_identifier }}</td><td>{{ item.source_name }}</td></tr>{% empty %}<tr><td colspan="2">Нет</td></tr>{% endfor %}</table></div></details>
+{% if comparison.unresolved_count %}<h2>Неполные позиции ({{ comparison.unresolved_count }})</h2><div class="table-wrap"><table class="data-table"><tr><th>Идентификатор</th><th>Статус</th></tr>{% for item in comparison.unmatched %}<tr><td>{{ item.source_identifier }}</td><td>Не сопоставлено</td></tr>{% endfor %}{% for item in comparison.ambiguous %}<tr><td>{{ item.source_identifier }}</td><td>Неоднозначно</td></tr>{% endfor %}</table></div>{% endif %}
 {% endif %}
 {% endblock %}

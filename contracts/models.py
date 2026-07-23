@@ -143,3 +143,44 @@ class NamedContractPosition(TimeStampedModel):
     def __str__(self):
         return f"{self.term}: {self.source_identifier}"
 
+
+class ContractActualSnapshot(TimeStampedModel):
+    contract = models.OneToOneField(Contract, on_delete=models.CASCADE, related_name="actual_snapshot", verbose_name="договор")
+    captured_at = models.DateTimeField("зафиксирован", auto_now_add=True)
+    captured_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="captured_contract_snapshots", verbose_name="зафиксировал")
+
+    class Meta:
+        verbose_name = "снимок актуального состояния договора"
+        verbose_name_plural = "снимки актуального состояния договоров"
+
+
+class ContractActualSnapshotService(TimeStampedModel):
+    snapshot = models.ForeignKey(ContractActualSnapshot, on_delete=models.CASCADE, related_name="services", verbose_name="снимок")
+    service = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="actual_snapshot_services", verbose_name="услуга")
+    contract_term = models.OneToOneField(ContractServiceTerm, on_delete=models.SET_NULL, null=True, blank=True, related_name="actual_snapshot_service", verbose_name="условие договора")
+    service_code = models.CharField("код услуги", max_length=64, blank=True)
+    service_name = models.CharField("наименование услуги", max_length=255)
+    accounting_mode = models.CharField("способ учета", max_length=16, choices=ContractServiceTerm.AccountingMode.choices)
+    actual_quantity = models.PositiveIntegerField("актуальное количество")
+
+    class Meta:
+        verbose_name = "услуга в снимке договора"
+        verbose_name_plural = "услуги в снимке договора"
+        constraints = [models.UniqueConstraint(fields=["snapshot", "service"], name="contracts_snapshot_service_unique")]
+
+
+class ContractActualSnapshotInstance(TimeStampedModel):
+    snapshot_service = models.ForeignKey(ContractActualSnapshotService, on_delete=models.CASCADE, related_name="instances", verbose_name="услуга снимка")
+    instance = models.ForeignKey(Instance, on_delete=models.SET_NULL, null=True, blank=True, related_name="actual_snapshot_instances", verbose_name="экземпляр")
+    catalog_code = models.CharField("системный код", max_length=128)
+    name = models.CharField("наименование", max_length=255)
+    instance_type_name = models.CharField("тип", max_length=255, blank=True)
+    glpi_inventory_number = models.CharField("инвентарный номер GLPI", max_length=255, blank=True)
+    glpi_serial_number = models.CharField("серийный номер GLPI", max_length=255, blank=True)
+    glpi_location = models.CharField("местоположение GLPI", max_length=255, blank=True)
+    glpi_external_id = models.CharField("внешний ID GLPI", max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "экземпляр в снимке договора"
+        verbose_name_plural = "экземпляры в снимке договора"
+        constraints = [models.UniqueConstraint(fields=["snapshot_service", "catalog_code"], name="contracts_snapshot_instance_unique")]

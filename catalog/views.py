@@ -121,6 +121,17 @@ def service_list(request):
         )
     ).order_by("name")
     context = _list_context(request, services, page_key, SERVICE_COLUMNS, keys, page_size, list_kind="service")
+    contract_keys = {"contract_quantity", "actual_quantity", "contract_delta", "contract_status", "composition_delta"}
+    if contract_keys & set(keys):
+        from contracts.models import Contract
+        from contracts.services import compare_contract_to_actual
+
+        active_contract = Contract.objects.filter(status=Contract.Status.ACTIVE).first()
+        comparisons = {}
+        if active_contract:
+            comparisons = {item["service"].pk: item for item in compare_contract_to_actual(active_contract)["services"]}
+        for service in context["page_obj"]:
+            service.contract_comparison = comparisons.get(service.pk)
     return render(request, "catalog/service_list.html", context)
 
 
@@ -153,6 +164,16 @@ def service_detail(request, pk):
         list_kind="service_membership",
         service=service,
     )
+    from contracts.models import Contract, ContractServiceTerm
+    from contracts.services import compare_contract_service_to_actual
+
+    active_contract = Contract.objects.filter(status=Contract.Status.ACTIVE).first()
+    contract_comparison = None
+    if active_contract:
+        term = ContractServiceTerm.objects.filter(contract=active_contract, service=service).select_related("contract", "service").first()
+        if term:
+            contract_comparison = compare_contract_service_to_actual(term)
+    context.update({"active_contract": active_contract, "contract_comparison": contract_comparison})
     return render(request, "catalog/service_detail.html", context)
 
 
