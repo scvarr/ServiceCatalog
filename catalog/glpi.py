@@ -11,6 +11,10 @@ from django.conf import settings
 class GlpiError(Exception):
     """Safe error suitable for user messages and persisted sync status."""
 
+    def __init__(self, message: str, *, http_status: int | None = None):
+        super().__init__(message)
+        self.http_status = http_status
+
 
 class GlpiDisabledError(GlpiError):
     pass
@@ -174,7 +178,7 @@ class GlpiClient:
             return payload
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else "?"
-            raise GlpiError(f"GLPI вернул HTTP {status} при получении {resource_name}.") from exc
+            raise GlpiError(f"GLPI вернул HTTP {status} при получении {resource_name}.", http_status=status if isinstance(status, int) else None) from exc
         except requests.RequestException as exc:
             raise GlpiError(f"Не удалось получить {resource_name} из GLPI: {type(exc).__name__}.") from exc
         except (TypeError, ValueError, KeyError) as exc:

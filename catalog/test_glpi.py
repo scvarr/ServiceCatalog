@@ -215,3 +215,12 @@ class GlpiImportTests(TestCase):
         self.assertEqual(session.status, GlpiImportSession.Status.PARTIAL)
         self.assertEqual(GlpiImportPayload.objects.filter(session=session).count(), 9)
         self.assertTrue(GlpiImportPayload.objects.get(session=session, endpoint_key="memory").error)
+
+    @patch("catalog.glpi_import.get_glpi_client")
+    def test_import_persists_component_http_status(self, get_client):
+        client = get_client.return_value
+        client.get_computer_payload.return_value = PAYLOAD
+        client.get_computer_component_payload.side_effect = lambda _, key: (_ for _ in ()).throw(GlpiError("HTTP 403", http_status=403)) if key == "processor" else []
+        client.get_computer_related_payload.return_value = []
+        session = create_glpi_import(self.reference)
+        self.assertEqual(GlpiImportPayload.objects.get(session=session, endpoint_key="processor").http_status, 403)

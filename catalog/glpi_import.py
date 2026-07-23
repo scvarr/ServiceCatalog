@@ -115,7 +115,7 @@ def create_glpi_import(reference, user=None):
             GlpiImportPayload.objects.create(session=session, endpoint_key=key, http_status=200, payload=payload)
         except GlpiError as exc:
             failures.append(key)
-            GlpiImportPayload.objects.create(session=session, endpoint_key=key, error=str(exc)[:500])
+            GlpiImportPayload.objects.create(session=session, endpoint_key=key, http_status=exc.http_status, error=str(exc)[:500])
 
     if "computer" not in payloads:
         session.status = GlpiImportSession.Status.FAILED
