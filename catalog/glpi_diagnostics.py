@@ -68,6 +68,7 @@ def build_glpi_diagnostic_archive(reference) -> bytes:
         "openapi_captured": schema is not None,
         "endpoint_count": len(endpoints),
         "redaction": "Sample values for identifying and contact fields are replaced with <redacted>.",
+        "documentation_authentication": "The exporter uses a GLPI web session only when the documentation page returns a login form.",
     }
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:

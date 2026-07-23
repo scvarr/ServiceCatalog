@@ -86,6 +86,9 @@ GLPI_CLIENT_ID = os.environ.get("GLPI_CLIENT_ID", "")
 GLPI_CLIENT_SECRET = os.environ.get("GLPI_CLIENT_SECRET", "")
 GLPI_USERNAME = os.environ.get("GLPI_USERNAME", "")
 GLPI_PASSWORD = os.environ.get("GLPI_PASSWORD", "")
+# Optional GLPI web-authentication source used only to read API documentation.
+# Leave empty to use the source preselected by the GLPI login page.
+GLPI_WEB_AUTH_SOURCE = os.environ.get("GLPI_WEB_AUTH_SOURCE", "")
 GLPI_CA_BUNDLE = os.environ.get("GLPI_CA_BUNDLE", "")
 GLPI_TIMEOUT_SECONDS = int(os.environ.get("GLPI_TIMEOUT_SECONDS", "15"))
 GLPI_TLS_VERIFY = os.environ.get("GLPI_TLS_VERIFY", "true").lower() == "true"

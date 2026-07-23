@@ -4,9 +4,10 @@ from unittest.mock import Mock, patch
 from django.contrib.auth.models import Permission, User
 from django.test import TestCase, override_settings
 from catalog.glpi import GlpiClient, GlpiDisabledError, GlpiError, normalize_computer
+from catalog.glpi_import import create_glpi_import, normalize_import_candidates
 from catalog.glpi_sync import sync_glpi_reference
 from catalog.glpi_diagnostics import build_glpi_diagnostic_archive
-from catalog.models import ExternalReference, GlpiComputerSnapshot, Instance, InstanceType
+from catalog.models import ExternalReference, GlpiComputerSnapshot, GlpiImportPayload, GlpiImportSession, Instance, InstanceType
 
 
 class FakeResponse:
@@ -69,6 +70,13 @@ class GlpiClientTests(TestCase):
         self.assertIsNone(computer.serial_number)
         self.assertIsNone(computer.last_inventory_update)
 
+    def test_component_request_uses_documented_computer_path(self):
+        session = Mock()
+        session.post.return_value = FakeResponse({"access_token": "top-secret-token", "expires_in": 3600})
+        session.get.return_value = FakeResponse([])
+        GlpiClient(session=session).get_computer_component_payload(2713, "memory")
+        self.assertEqual(session.get.call_args.args[0], "https://glpi.test/api.php/v2.3/Assets/Computer/2713/Component/Memory")
+
     def test_tls_verification_can_be_explicitly_disabled(self):
         with self.settings(GLPI_TLS_VERIFY=False):
             self.assertFalse(GlpiClient().verify)
@@ -86,7 +94,7 @@ class GlpiClientTests(TestCase):
         missing = FakeResponse({"error": "not found"}, 404)
         documentation = FakeResponse('<script>const ui = SwaggerUIBundle({url: "/api.php/v2.3/schema.json"});</script>', content_type="text/html")
         schema = FakeResponse({"openapi": "3.0.0", "paths": {"/Assets/Computer": {"get": {}}}})
-        session.get.side_effect = [documentation, missing, missing, missing, missing, schema]
+        session.get.side_effect = [documentation, missing, missing, missing, missing, missing, schema]
         result, attempts, documents = GlpiClient(session=session).get_api_schema()
         self.assertEqual(result["openapi"], "3.0.0")
         self.assertIn("api.php-doc", documents)
@@ -98,11 +106,21 @@ class GlpiClientTests(TestCase):
         documentation = FakeResponse('<script src="/api.php/doc/swagger-initializer.js"></script>', content_type="text/html")
         initializer = FakeResponse('SwaggerUIBundle({url: "/api.php/openapi.json"});', content_type="application/javascript")
         schema = FakeResponse({"openapi": "3.0.0", "paths": {"/Assets": {"get": {}}}})
-        session.get.side_effect = [documentation, missing, missing, missing, missing, initializer, schema]
+        session.get.side_effect = [documentation, missing, missing, missing, missing, missing, initializer, schema]
         result, attempts, documents = GlpiClient(session=session).get_api_schema()
         self.assertEqual(result["openapi"], "3.0.0")
         self.assertIn("api.php-doc-swagger-initializer.js", documents)
         self.assertEqual(attempts[-1]["path"], "/api.php/openapi.json")
+
+    def test_api_schema_creates_web_session_when_documentation_is_login_page(self):
+        session = Mock()
+        login_page = FakeResponse('<input name="_glpi_csrf_token" value="csrf"><select><option value="ldap-1" selected>LDAP</option></select><input name="login_name">', content_type="text/html")
+        session.get.side_effect = [login_page, login_page, FakeResponse({"openapi": "3.0.0", "paths": {"/Assets": {"get": {}}}})]
+        session.post.return_value = FakeResponse("<html>logged in</html>", content_type="text/html")
+        schema, attempts, _ = GlpiClient(session=session).get_api_schema()
+        self.assertEqual(schema["openapi"], "3.0.0")
+        self.assertTrue(attempts[0]["login_required"])
+        self.assertEqual(session.post.call_args.kwargs["data"]["auth"], "ldap-1")
 
     @patch("catalog.glpi_diagnostics.get_glpi_client")
     def test_diagnostic_archive_contains_redacted_sample_and_endpoint_list(self, get_client):
@@ -164,3 +182,36 @@ class GlpiSyncTests(TestCase):
         self.client.force_login(user)
         response = self.client.post(f"/instances/{self.instance.pk}/sync-glpi/", follow=True)
         self.assertContains(response, "внешняя ссылка GLPI Computer")
+
+
+class GlpiImportTests(TestCase):
+    def setUp(self):
+        kind = InstanceType.objects.create(name="Сервер")
+        self.instance = Instance.objects.create(name="srv-import", instance_type=kind)
+        self.reference = ExternalReference.objects.create(instance=self.instance, source_system="glpi", external_object_type="Computer", external_id="2713")
+
+    def test_normalizes_server_profile_candidates_from_components(self):
+        candidates = normalize_import_candidates({
+            "computer": {"manufacturer": {"name": "DEPO"}, "model": {"name": "X8DTL"}},
+            "processor": [{"processor": {"name": "Xeon E5"}, "nbcores": 8}, {"processor": {"name": "Xeon E5"}, "nbcores": 8}],
+            "memory": [{"size": 32768}, {"size": 32768}],
+            "controller": [{"controller": {"name": "PERC H730"}}],
+            "hard_drive": [{"hard_drive": {"name": "SSD"}, "capacity": 960000}],
+            "os_installation": [{"operatingsystem": {"name": "VMware ESXi"}, "version": {"name": "8.0"}}],
+        })
+        self.assertEqual(candidates["cpu_summary"][0], "2 × Xeon E5")
+        self.assertEqual(candidates["core_count"][0], "16")
+        self.assertEqual(candidates["memory_total_gb"][0], "64")
+        self.assertIn("PERC H730", candidates["raid_controller"][0])
+        self.assertIn("VMware ESXi 8.0", candidates["hypervisor"][0])
+
+    @patch("catalog.glpi_import.get_glpi_client")
+    def test_import_keeps_successful_payloads_when_one_component_fails(self, get_client):
+        client = get_client.return_value
+        client.get_computer_payload.return_value = PAYLOAD
+        client.get_computer_component_payload.side_effect = lambda _, key: (_ for _ in ()).throw(GlpiError("HTTP 403")) if key == "memory" else []
+        client.get_computer_related_payload.return_value = []
+        session = create_glpi_import(self.reference)
+        self.assertEqual(session.status, GlpiImportSession.Status.PARTIAL)
+        self.assertEqual(GlpiImportPayload.objects.filter(session=session).count(), 9)
+        self.assertTrue(GlpiImportPayload.objects.get(session=session, endpoint_key="memory").error)

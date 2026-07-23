@@ -270,7 +270,12 @@ def import_glpi_instance(request, pk):
             messages.error(request, "Для экземпляра не задана внешняя ссылка GLPI Computer.")
         else:
             session = create_glpi_import(reference, request.user)
-            messages.success(request, "Импорт GLPI подготовлен." if session.status == "completed" else "Импорт GLPI завершился с ошибкой.")
+            if session.status == GlpiImportSession.Status.COMPLETED:
+                messages.success(request, "Импорт GLPI подготовлен.")
+            elif session.status == GlpiImportSession.Status.PARTIAL:
+                messages.warning(request, "Импорт GLPI подготовлен частично: доступные данные сохранены.")
+            else:
+                messages.error(request, "Импорт GLPI завершился с ошибкой.")
     return redirect("catalog:instance_detail", pk=pk)
 
 
