@@ -4,6 +4,9 @@ services:
     env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      servicecatalog_net:
+        ipv4_address: 172.30.0.11
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -15,7 +18,7 @@ services:
     build: .
     env_file: .env
     ports:
-      - "8000:8000"
+      - "${HOST_PORT:-8380}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -25,7 +28,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    networks:
+      servicecatalog_net:
+        ipv4_address: 172.30.0.10
 
 volumes:
   postgres_data:
 
+networks:
+  servicecatalog_net:
+    name: servicecatalog_net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
