@@ -1,8 +1,7 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>Каталог услуг</title><style>
-body{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem}nav{display:flex;gap:1rem;margin-bottom:2rem}table{border-collapse:collapse;width:100%}th,td{padding:.5rem;border-bottom:1px solid #ddd;text-align:left}.message{padding:.5rem;background:#eef;margin:.5rem 0}
+body{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem}nav{display:flex;gap:1rem;margin-bottom:2rem}table{border-collapse:collapse;width:100%}th,td{padding:.5rem;border-bottom:1px solid #ddd;text-align:left}.message{padding:.5rem;background:#eef;margin:.5rem 0}.list-toolbar{display:flex;gap:1rem;align-items:flex-start;margin-bottom:.5rem}.search-form{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}.columns-panel{padding:.25rem .5rem;border:1px solid #ddd;border-radius:.25rem}.columns-panel form{margin:.5rem 0}.columns-panel label{margin-right:.75rem}.reset-form{display:inline}.list-summary{margin:.5rem 0}.pagination{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:1rem}
 </style></head><body>
 <nav><a href="{% url 'catalog:service_list' %}">Услуги</a><a href="{% url 'catalog:instance_list' %}">Экземпляры</a><a href="{% url 'contracts:contract_list' %}">Договоры</a><a href="/admin/">Администрирование</a>{% if user.is_authenticated %}<form method="post" action="{% url 'logout' %}">{% csrf_token %}<button>Выйти ({{ user.username }})</button></form>{% endif %}</nav>
 {% for message in messages %}<p class="message">{{ message }}</p>{% endfor %}{% block content %}{% endblock %}
 </body></html>
-

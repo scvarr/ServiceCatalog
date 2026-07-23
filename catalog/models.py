@@ -128,6 +128,25 @@ class ServiceMembership(TimeStampedModel):
         return self.status == self.Status.ACTIVE and self.included_at <= timezone.localdate()
 
 
+class ListViewPreference(models.Model):
+    class PageKey(models.TextChoices):
+        SERVICE_LIST = "service_list", "Список услуг"
+        INSTANCE_LIST = "instance_list", "Список экземпляров"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="list_view_preferences", verbose_name="пользователь")
+    page_key = models.CharField("страница", max_length=32, choices=PageKey)
+    visible_columns = models.JSONField("видимые столбцы", default=list, blank=True)
+    page_size = models.PositiveSmallIntegerField("строк на странице", default=25)
+
+    class Meta:
+        verbose_name = "настройка списка"
+        verbose_name_plural = "настройки списков"
+        constraints = [models.UniqueConstraint(fields=["user", "page_key"], name="catalog_list_preference_unique")]
+
+    def __str__(self):
+        return f"{self.user} — {self.get_page_key_display()}"
+
+
 class ExternalReference(TimeStampedModel):
     class SourceSystem(models.TextChoices):
         GLPI = "glpi", "GLPI"

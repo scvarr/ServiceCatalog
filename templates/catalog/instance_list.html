@@ -1,2 +1,27 @@
-{% extends "base.html" %}{% block content %}<h1>Экземпляры</h1><form><input name="q" value="{{ request.GET.q }}" placeholder="Поиск"><select name="type"><option value="">Все типы</option>{% for type in types %}<option value="{{ type.pk }}">{{ type.name }}</option>{% endfor %}</select><select name="status"><option value="">Все состояния</option>{% for value,label in instances.model.Status.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select><button>Фильтровать</button></form><table><tr><th>Код</th><th>Наименование</th><th>Тип</th><th>Состояние</th></tr>{% for instance in instances %}<tr><td><a href="{% url 'catalog:instance_detail' instance.pk %}">{{ instance.catalog_code }}</a></td><td>{{ instance.name }}</td><td>{{ instance.instance_type }}</td><td>{{ instance.get_status_display }}</td></tr>{% empty %}<tr><td colspan="4">Экземпляров нет.</td></tr>{% endfor %}</table>{% endblock %}
-
+{% extends "base.html" %}
+{% block content %}
+<h1>Экземпляры</h1>
+{% include "catalog/includes/list_controls.html" %}
+<table>
+  <tr>{% for column in visible_columns %}<th>{{ column.label }}</th>{% endfor %}</tr>
+  {% for instance in page_obj %}
+  <tr>
+    {% for column in visible_columns %}
+    <td>
+      {% if column.key == "name" %}<a href="{% url 'catalog:instance_detail' instance.pk %}">{{ instance.name }}</a>
+      {% elif column.key == "instance_type" %}{{ instance.instance_type }}
+      {% elif column.key == "status" %}{{ instance.get_status_display }}
+      {% elif column.key == "catalog_code" %}{{ instance.catalog_code }}
+      {% elif column.key == "source" %}{{ instance.get_source_display }}
+      {% elif column.key == "services" %}
+        {% for membership in instance.active_memberships %}<a href="{% url 'catalog:service_detail' membership.service.pk %}">{{ membership.service.name }}</a>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+      {% endif %}
+    </td>
+    {% endfor %}
+  </tr>
+  {% empty %}
+  <tr><td colspan="{{ visible_columns|length }}">Экземпляров по заданным условиям нет.</td></tr>
+  {% endfor %}
+</table>
+{% include "catalog/includes/pagination.html" %}
+{% endblock %}

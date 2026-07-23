@@ -1,0 +1,13 @@
+{% if page_obj.paginator.count %}
+<nav class="pagination" aria-label="Навигация по страницам">
+  <span>Показано {{ page_obj.start_index }}–{{ page_obj.end_index }} из {{ page_obj.paginator.count }}</span>
+  {% if page_obj.has_previous %}<a href="?{% if page_query %}{{ page_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Предыдущая</a>{% endif %}
+  {% for page_number in page_range %}
+    {% if page_number == "…" %}<span aria-hidden="true">…</span>
+    {% elif page_number == page_obj.number %}<strong aria-current="page">{{ page_number }}</strong>
+    {% else %}<a href="?{% if page_query %}{{ page_query }}&amp;{% endif %}page={{ page_number }}">{{ page_number }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if page_obj.has_next %}<a href="?{% if page_query %}{{ page_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Следующая</a>{% endif %}
+</nav>
+{% endif %}

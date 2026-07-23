@@ -1,2 +1,26 @@
-{% extends "base.html" %}{% block content %}<h1>Услуги</h1><table><tr><th>Код</th><th>Наименование</th><th>Экземпляров</th><th>Учёт</th></tr>{% for service in services %}<tr><td><a href="{% url 'catalog:service_detail' service.pk %}">{{ service.code }}</a></td><td>{{ service.name }}</td><td>{{ service.member_count }}</td><td>{{ service.get_default_accounting_mode_display }}</td></tr>{% empty %}<tr><td colspan="4">Услуг пока нет.</td></tr>{% endfor %}</table>{% endblock %}
-
+{% extends "base.html" %}
+{% block content %}
+<h1>Услуги</h1>
+{% include "catalog/includes/list_controls.html" %}
+<table>
+  <tr>{% for column in visible_columns %}<th>{{ column.label }}</th>{% endfor %}</tr>
+  {% for service in page_obj %}
+  <tr>
+    {% for column in visible_columns %}
+    <td>
+      {% if column.key == "name" %}<a href="{% url 'catalog:service_detail' service.pk %}">{{ service.name }}</a>
+      {% elif column.key == "instance_count" %}{{ service.member_count }}
+      {% elif column.key == "accounting_mode" %}{{ service.get_default_accounting_mode_display }}
+      {% elif column.key == "code" %}{{ service.code }}
+      {% elif column.key == "description" %}{{ service.description|default:"—" }}
+      {% elif column.key == "is_active" %}{% if service.is_active %}Да{% else %}Нет{% endif %}
+      {% endif %}
+    </td>
+    {% endfor %}
+  </tr>
+  {% empty %}
+  <tr><td colspan="{{ visible_columns|length }}">Услуг по заданным условиям нет.</td></tr>
+  {% endfor %}
+</table>
+{% include "catalog/includes/pagination.html" %}
+{% endblock %}
