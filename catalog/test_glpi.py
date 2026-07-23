@@ -75,24 +75,34 @@ class GlpiClientTests(TestCase):
 
     def test_api_schema_returns_openapi_document(self):
         session = Mock()
-        session.post.return_value = FakeResponse({"access_token": "top-secret-token", "expires_in": 3600})
         session.get.return_value = FakeResponse({"openapi": "3.0.0", "paths": {"/Assets/Computer/{id}": {"get": {}}}})
         schema, attempts, documents = GlpiClient(session=session).get_api_schema()
         self.assertEqual(schema["openapi"], "3.0.0")
-        self.assertEqual(attempts[0]["path"], "/api.php/v2.3/openapi.json")
+        self.assertEqual(attempts[0]["path"], "/api.php/doc")
         self.assertEqual(documents, {})
 
     def test_api_schema_follows_openapi_url_from_documentation_page(self):
         session = Mock()
-        session.post.return_value = FakeResponse({"access_token": "top-secret-token", "expires_in": 3600})
         missing = FakeResponse({"error": "not found"}, 404)
         documentation = FakeResponse('<script>const ui = SwaggerUIBundle({url: "/api.php/v2.3/schema.json"});</script>', content_type="text/html")
         schema = FakeResponse({"openapi": "3.0.0", "paths": {"/Assets/Computer": {"get": {}}}})
-        session.get.side_effect = [missing, missing, documentation, missing, schema]
+        session.get.side_effect = [documentation, missing, missing, missing, missing, schema]
         result, attempts, documents = GlpiClient(session=session).get_api_schema()
         self.assertEqual(result["openapi"], "3.0.0")
-        self.assertIn("api.php-v2.3-doc", documents)
+        self.assertIn("api.php-doc", documents)
         self.assertEqual(attempts[-1]["path"], "/api.php/v2.3/schema.json")
+
+    def test_api_schema_follows_url_from_swagger_initializer_script(self):
+        session = Mock()
+        missing = FakeResponse({"error": "not found"}, 404)
+        documentation = FakeResponse('<script src="/api.php/doc/swagger-initializer.js"></script>', content_type="text/html")
+        initializer = FakeResponse('SwaggerUIBundle({url: "/api.php/openapi.json"});', content_type="application/javascript")
+        schema = FakeResponse({"openapi": "3.0.0", "paths": {"/Assets": {"get": {}}}})
+        session.get.side_effect = [documentation, missing, missing, missing, missing, initializer, schema]
+        result, attempts, documents = GlpiClient(session=session).get_api_schema()
+        self.assertEqual(result["openapi"], "3.0.0")
+        self.assertIn("api.php-doc-swagger-initializer.js", documents)
+        self.assertEqual(attempts[-1]["path"], "/api.php/openapi.json")
 
     @patch("catalog.glpi_diagnostics.get_glpi_client")
     def test_diagnostic_archive_contains_redacted_sample_and_endpoint_list(self, get_client):

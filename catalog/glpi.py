@@ -127,13 +127,17 @@ class GlpiClient:
             raise GlpiError("GLPI вернул некорректные данные компьютера.") from exc
 
     def get_api_schema(self) -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, str]]:
-        """Fetch API docs and their OpenAPI document with the current token."""
-        token = self._token()
+        """Fetch public API docs and the OpenAPI document they reference.
+
+        GLPI intentionally exposes its API documentation before authorization.
+        This discovery therefore must not depend on OAuth being configured.
+        """
         paths = (
+            "/api.php/doc",
+            "/api.php/doc/openapi.json",
+            f"/api.php/{settings.GLPI_API_VERSION}/doc",
             f"/api.php/{settings.GLPI_API_VERSION}/openapi.json",
             f"/api.php/{settings.GLPI_API_VERSION}/openapi",
-            f"/api.php/{settings.GLPI_API_VERSION}/doc",
-            "/api.php/doc",
         )
         attempts: list[dict[str, Any]] = []
         documents: dict[str, str] = {}
@@ -153,7 +157,7 @@ class GlpiClient:
                     continue
                 response = self.session.get(
                     url,
-                    headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                    headers={"Accept": "application/json, text/html;q=0.9"},
                     timeout=settings.GLPI_TIMEOUT_SECONDS,
                     verify=self.verify,
                 )
@@ -165,13 +169,19 @@ class GlpiClient:
                 attempts.append({"path": path, "http_status": response.status_code, "openapi_document": is_schema})
                 if response.status_code < 400 and is_schema:
                     return payload, attempts, documents
-                content_type = response.headers.get("Content-Type", "")
-                if response.status_code < 400 and "html" in content_type.lower():
-                    html = response.text
-                    documents[path.strip("/").replace("/", "-") or "doc"] = html
-                    for candidate in re.findall(r"(?:url|spec(?:ification)?)[\s:=]+[\"']([^\"']+)", html, flags=re.IGNORECASE):
-                        resolved = urljoin(url, candidate)
-                        candidate_path = urlparse(resolved).path
+                content_type = response.headers.get("Content-Type", "").lower()
+                is_html = "html" in content_type
+                is_text_document = is_html or "javascript" in content_type or "ecmascript" in content_type or "text/plain" in content_type
+                if response.status_code < 400 and is_text_document:
+                    document = response.text
+                    documents[path.strip("/").replace("/", "-") or "doc"] = document
+                    candidates = re.findall(r"(?:url|spec(?:ification)?)[\s:=]+[\"']([^\"']+)", document, flags=re.IGNORECASE)
+                    if is_html:
+                        candidates += re.findall(r"<script[^>]+src=[\"']([^\"']+)[\"']", document, flags=re.IGNORECASE)
+                    for candidate in candidates:
+                        resolved = urljoin(getattr(response, "url", url), candidate)
+                        candidate_parsed = urlparse(resolved)
+                        candidate_path = candidate_parsed.path + (f"?{candidate_parsed.query}" if candidate_parsed.query else "")
                         if candidate_path and candidate_path not in visited and candidate_path not in queued:
                             queued.append(candidate_path)
             except requests.RequestException as exc:
