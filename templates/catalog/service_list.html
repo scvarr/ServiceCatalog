@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block content %}<h1>Услуги</h1><table><tr><th>Код</th><th>Наименование</th><th>Экземпляров</th><th>Учёт</th></tr>{% for service in services %}<tr><td><a href="{% url 'catalog:service_detail' service.pk %}">{{ service.code }}</a></td><td>{{ service.name }}</td><td>{{ service.member_count }}</td><td>{{ service.get_default_accounting_mode_display }}</td></tr>{% empty %}<tr><td colspan="4">Услуг пока нет.</td></tr>{% endfor %}</table>{% endblock %}
+

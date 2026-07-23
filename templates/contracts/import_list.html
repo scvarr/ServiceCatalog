@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block content %}<h1>Импорт перечня: {{ term.service }}</h1><p>CSV должен содержать заголовок <code>catalog_code</code>; необязательный заголовок — <code>name</code>.</p><form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="file" name="csv_file" accept=".csv,text/csv" required><button>Импортировать</button></form>{% endblock %}
+

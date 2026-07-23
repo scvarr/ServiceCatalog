@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block content %}<h1>{{ instance.name }}</h1><dl><dt>Код</dt><dd>{{ instance.catalog_code }}</dd><dt>Тип</dt><dd>{{ instance.instance_type }}</dd><dt>Состояние</dt><dd>{{ instance.get_status_display }}</dd><dt>Источник</dt><dd>{{ instance.get_source_display }}</dd></dl><h2>Услуги</h2><ul>{% for m in memberships %}<li><a href="{% url 'catalog:service_detail' m.service.pk %}">{{ m.service }}</a>: {{ m.included_at }} — {{ m.excluded_at|default:"по настоящее время" }}</li>{% empty %}<li>Нет связей.</li>{% endfor %}</ul>{% endblock %}
+
