@@ -1,2 +1,6 @@
-{% extends "base.html" %}{% block content %}<h1>{{ contract }}</h1><p>{{ contract.start_date }} — {{ contract.end_date }} · {{ contract.get_status_display }}</p><h2>Условия услуг</h2><table><tr><th>Услуга</th><th>Режим</th><th>Количество</th><th></th></tr>{% for term in contract.service_terms.all %}<tr><td>{{ term.service }}</td><td>{{ term.get_accounting_mode_display }}</td><td>{{ term.contracted_quantity|default:"—" }}</td><td><a href="{% url 'contracts:term_comparison' term.pk %}">Сравнение</a></td></tr>{% endfor %}</table>{% endblock %}
-
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ contract }}</h1><p>{{ contract.start_date }} — {{ contract.end_date }} · {{ contract.get_status_display }}</p>
+<h2>Условия услуг</h2>
+<div class="table-wrap"><table class="data-table"><tr><th>Услуга</th><th>Режим</th><th>Количество</th><th>Действие</th></tr>{% for term in contract.service_terms.all %}<tr><td>{{ term.service }}</td><td>{{ term.get_accounting_mode_display }}</td><td>{{ term.contracted_quantity|default:"—" }}</td><td><a href="{% url 'contracts:term_comparison' term.pk %}">Сравнение</a></td></tr>{% empty %}<tr><td colspan="4">Условия отсутствуют.</td></tr>{% endfor %}</table></div>
+{% endblock %}

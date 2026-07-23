@@ -4,7 +4,7 @@
 <p>{{ service.description|default:"Описание отсутствует." }}</p>
 <h2>Фактический состав</h2>
 {% include "catalog/includes/list_controls.html" %}
-<table>
+<div class="table-wrap"><table class="data-table">
   <tr>{% for column in visible_columns %}<th>{{ column.label }}</th>{% endfor %}</tr>
   {% for membership in page_obj %}
   <tr>
@@ -22,6 +22,6 @@
   {% empty %}
   <tr><td colspan="{{ visible_columns|length }}">В фактическом составе нет экземпляров по заданным условиям.</td></tr>
   {% endfor %}
-</table>
+</table></div>
 {% include "catalog/includes/pagination.html" %}
 {% endblock %}

@@ -18,27 +18,25 @@
     <button type="submit">Найти</button>
   </form>
 
-  <details class="columns-panel">
-    <summary>Столбцы</summary>
-    <form method="post">
+  <button type="button" class="button-secondary" onclick="document.getElementById('columns-modal').showModal()">Столбцы</button>
+  <dialog id="columns-modal" class="columns-modal" aria-labelledby="columns-modal-title">
+    <form method="post" class="columns-form">
       {% csrf_token %}
       <input type="hidden" name="action" value="save_preferences">
       <input type="hidden" name="q" value="{{ query }}">
       {% if list_kind == "instance" %}<input type="hidden" name="type" value="{{ selected_type }}"><input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
       <input type="hidden" name="page" value="{{ page_obj.number }}">
       <fieldset>
-        <legend>Отображаемые столбцы</legend>
+        <legend id="columns-modal-title">Отображаемые столбцы</legend>
         {% for column in columns %}
           <label><input type="checkbox" name="visible_columns" value="{{ column.key }}"{% if column.key in visible_column_keys %} checked{% endif %}{% if column.required %} disabled{% endif %}> {{ column.label }}{% if column.required %} (обязательный){% endif %}</label>
         {% endfor %}
       </fieldset>
-      <label for="page-size">На странице</label>
-      <select id="page-size" name="page_size">
-        {% for size in page_sizes %}<option value="{{ size }}"{% if page_size == size %} selected{% endif %}>{{ size }}</option>{% endfor %}
-      </select>
+      <input type="hidden" name="page_size" value="{{ page_size }}">
       <button type="submit">Сохранить</button>
+      <button type="button" class="button-secondary" onclick="document.getElementById('columns-modal').close()">Отмена</button>
     </form>
-    <form method="post" class="reset-form">
+    <form method="post" class="reset-form columns-reset-form">
       {% csrf_token %}
       <input type="hidden" name="action" value="reset_preferences">
       <input type="hidden" name="q" value="{{ query }}">
@@ -47,6 +45,6 @@
       <input type="hidden" name="page_size" value="{{ page_size }}">
       <button type="submit">Вернуть по умолчанию</button>
     </form>
-  </details>
+  </dialog>
 </div>
-<p class="list-summary">Найдено: {{ page_obj.paginator.count }}. На странице: {{ page_size }}.</p>
+<p class="list-summary">Найдено: {{ page_obj.paginator.count }}.</p>

@@ -119,6 +119,15 @@ class CatalogListViewTests(TestCase):
         response = self.client.get(url)
         self.assertContains(response, "<th>Тип</th>", html=True)
 
+    def test_page_size_update_keeps_saved_columns(self):
+        url = reverse("catalog:service_list")
+        self.client.post(url, {"action": "save_preferences", "visible_columns": ["name", "code"], "page_size": "25"})
+        response = self.client.post(url, {"action": "save_page_size", "page_size": "100"})
+        self.assertRedirects(response, f"{url}?page_size=100")
+        preference = ListViewPreference.objects.get(user=self.user, page_key="service_list")
+        self.assertEqual(preference.visible_columns, ["name", "code"])
+        self.assertEqual(preference.page_size, 100)
+
     def test_lists_require_login(self):
         self.client.logout()
         response = self.client.get(reverse("catalog:service_list"))

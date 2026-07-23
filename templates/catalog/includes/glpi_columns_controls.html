@@ -1,15 +1,16 @@
-<details class="columns-panel">
-  <summary>Столбцы</summary>
-  <form method="post">
+<button type="button" class="button-secondary" onclick="document.getElementById('glpi-columns-modal').showModal()">Столбцы</button>
+<dialog id="glpi-columns-modal" class="columns-modal" aria-labelledby="glpi-columns-modal-title">
+  <form method="post" class="columns-form">
     {% csrf_token %}
     <input type="hidden" name="action" value="save_preferences">
-    <fieldset><legend>Отображаемые столбцы</legend>
+    <fieldset><legend id="glpi-columns-modal-title">Отображаемые столбцы</legend>
       {% for column in glpi_columns %}<label><input type="checkbox" name="visible_columns" value="{{ column.key }}"{% if column.key in visible_glpi_column_keys %} checked{% endif %}> {{ column.label }}</label>{% endfor %}
     </fieldset>
     <input type="hidden" name="page_size" value="25">
     <button type="submit">Сохранить</button>
+    <button type="button" class="button-secondary" onclick="document.getElementById('glpi-columns-modal').close()">Отмена</button>
   </form>
-  <form method="post" class="reset-form">
+  <form method="post" class="reset-form columns-reset-form">
     {% csrf_token %}<input type="hidden" name="action" value="reset_preferences"><button type="submit">Вернуть по умолчанию</button>
   </form>
-</details>
+</dialog>

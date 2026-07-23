@@ -2,7 +2,7 @@
 {% block content %}
 <h1>Экземпляры</h1>
 {% include "catalog/includes/list_controls.html" %}
-<table>
+<div class="table-wrap"><table class="data-table">
   <tr>{% for column in visible_columns %}<th>{{ column.label }}</th>{% endfor %}</tr>
   {% for instance in page_obj %}
   <tr>
@@ -22,6 +22,6 @@
   {% empty %}
   <tr><td colspan="{{ visible_columns|length }}">Экземпляров по заданным условиям нет.</td></tr>
   {% endfor %}
-</table>
+</table></div>
 {% include "catalog/includes/pagination.html" %}
 {% endblock %}

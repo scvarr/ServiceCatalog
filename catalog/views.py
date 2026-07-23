@@ -57,7 +57,12 @@ def _save_preference(request, page_key, columns):
         messages.success(request, "Настройки списка возвращены к значениям по умолчанию.")
         return _redirect_after_preference_update(request, page_key)
 
-    selected = normalize_columns(request.POST.getlist("visible_columns"), columns)
+    action = request.POST.get("action")
+    if action == "save_page_size":
+        preference = _preference(request, page_key)
+        selected = visible_columns(preference.visible_columns if preference else None, columns)
+    else:
+        selected = normalize_columns(request.POST.getlist("visible_columns"), columns)
     page_size = normalize_page_size(request.POST.get("page_size"), DEFAULT_PAGE_SIZE)
     ListViewPreference.objects.update_or_create(
         user=request.user,

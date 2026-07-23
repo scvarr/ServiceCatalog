@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ instance.name }}</h1>
-<table class="details-table"><tr><th>Код</th><th>Тип</th><th>Состояние</th><th>Источник</th></tr><tr><td>{{ instance.catalog_code }}</td><td>{{ instance.instance_type }}</td><td>{{ instance.get_status_display }}</td><td>{{ instance.get_source_display }}</td></tr></table>
+<div class="table-wrap"><table class="data-table details-table"><tr><th>Код</th><th>Тип</th><th>Состояние</th><th>Источник</th></tr><tr><td>{{ instance.catalog_code }}</td><td>{{ instance.instance_type }}</td><td>{{ instance.get_status_display }}</td><td>{{ instance.get_source_display }}</td></tr></table></div>
 
 <h2>Данные GLPI</h2>
 {% if glpi_reference %}
   {% if perms.catalog.change_instance %}<form method="post" action="{% url 'catalog:sync_glpi_instance' instance.pk %}">{% csrf_token %}<button>Обновить данные из GLPI</button></form>{% endif %}
   {% include "catalog/includes/glpi_columns_controls.html" %}
   {% with data=glpi_reference.glpi_computer %}
-  <div class="table-wrap"><table><tr>{% for column in visible_glpi_columns %}<th>{{ column.label }}</th>{% endfor %}</tr><tr>
+  <div class="table-wrap"><table class="data-table"><tr>{% for column in visible_glpi_columns %}<th>{{ column.label }}</th>{% endfor %}</tr><tr>
     {% for column in visible_glpi_columns %}<td>
       {% if column.key == "external_name" %}{{ data.external_name|default:"—" }}
       {% elif column.key == "inventory_number" %}{{ data.inventory_number|default:"—" }}
@@ -34,5 +34,5 @@
   {% endwith %}
 {% else %}<p>Внешняя ссылка GLPI Computer не задана.</p>{% endif %}
 
-<h2>Услуги</h2><ul>{% for m in memberships %}<li><a href="{% url 'catalog:service_detail' m.service.pk %}">{{ m.service }}</a>: {{ m.included_at }} — {{ m.excluded_at|default:"по настоящее время" }}</li>{% empty %}<li>Нет связей.</li>{% endfor %}</ul>
+<h2>Услуги</h2><div class="table-wrap"><table class="data-table"><tr><th>Услуга</th><th>Включен</th><th>Исключен</th></tr>{% for m in memberships %}<tr><td><a href="{% url 'catalog:service_detail' m.service.pk %}">{{ m.service }}</a></td><td>{{ m.included_at }}</td><td>{{ m.excluded_at|default:"По настоящее время" }}</td></tr>{% empty %}<tr><td colspan="3">Нет связей.</td></tr>{% endfor %}</table></div>
 {% endblock %}
