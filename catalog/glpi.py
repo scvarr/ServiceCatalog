@@ -124,6 +124,35 @@ class GlpiClient:
         except (TypeError, ValueError, KeyError) as exc:
             raise GlpiError("GLPI вернул некорректные данные компьютера.") from exc
 
+    def get_api_schema(self) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        """Fetch OpenAPI documentation if the installed GLPI exposes it."""
+        token = self._token()
+        paths = (
+            f"/api.php/{settings.GLPI_API_VERSION}/openapi.json",
+            f"/api.php/{settings.GLPI_API_VERSION}/openapi",
+            f"/api.php/{settings.GLPI_API_VERSION}/doc",
+            "/api.php/doc",
+        )
+        attempts: list[dict[str, Any]] = []
+        for path in paths:
+            try:
+                response = self.session.get(
+                    f"{settings.GLPI_BASE_URL}{path}",
+                    headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                    timeout=settings.GLPI_TIMEOUT_SECONDS,
+                    verify=self.verify,
+                )
+                try:
+                    payload = response.json()
+                except (TypeError, ValueError):
+                    payload = None
+                attempts.append({"path": path, "http_status": response.status_code, "openapi_document": isinstance(payload, dict) and "paths" in payload})
+                if response.status_code < 400 and isinstance(payload, dict) and "paths" in payload:
+                    return payload, attempts
+            except requests.RequestException as exc:
+                attempts.append({"path": path, "error": type(exc).__name__})
+        return None, attempts
+
 
 _client: GlpiClient | None = None
 

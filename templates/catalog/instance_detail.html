@@ -8,6 +8,7 @@
 {% if glpi_reference %}
   {% if perms.catalog.change_instance %}<form method="post" action="{% url 'catalog:sync_glpi_instance' instance.pk %}">{% csrf_token %}<button>Обновить данные из GLPI</button></form>{% endif %}
   {% if perms.catalog.change_instance %}<form method="post" action="{% url 'catalog:import_glpi_instance' instance.pk %}">{% csrf_token %}<button>Подготовить импорт GLPI</button></form>{% endif %}
+  {% if perms.catalog.delete_instance %}<form method="post" action="{% url 'catalog:export_glpi_diagnostics' instance.pk %}">{% csrf_token %}<button>Скачать диагностический пакет GLPI</button></form>{% endif %}
   {% include "catalog/includes/glpi_columns_controls.html" %}
   {% with data=glpi_reference.glpi_computer %}
   <div class="table-wrap"><table class="data-table"><tr>{% for column in visible_glpi_columns %}<th>{{ column.label }}</th>{% endfor %}</tr><tr>

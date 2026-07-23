@@ -1,11 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .glpi import GlpiError
 from .glpi_sync import sync_glpi_reference
 from .glpi_import import apply_glpi_candidates, create_glpi_import
+from .glpi_diagnostics import build_glpi_diagnostic_archive
 from .listing import (
     DEFAULT_PAGE_SIZE,
     GLPI_COMPUTER_COLUMNS,
@@ -270,6 +272,24 @@ def import_glpi_instance(request, pk):
             session = create_glpi_import(reference, request.user)
             messages.success(request, "Импорт GLPI подготовлен." if session.status == "completed" else "Импорт GLPI завершился с ошибкой.")
     return redirect("catalog:instance_detail", pk=pk)
+
+
+@permission_required("catalog.delete_instance", raise_exception=True)
+def export_glpi_diagnostics(request, pk):
+    if request.method != "POST":
+        return redirect("catalog:instance_detail", pk=pk)
+    instance = get_object_or_404(Instance, pk=pk)
+    reference = instance.external_references.filter(source_system="glpi", external_object_type="Computer").first()
+    if not reference:
+        messages.error(request, "Для экземпляра не задана внешняя ссылка GLPI Computer.")
+        return redirect("catalog:instance_detail", pk=pk)
+    try:
+        response = HttpResponse(build_glpi_diagnostic_archive(reference), content_type="application/zip")
+    except GlpiError as exc:
+        messages.error(request, f"Не удалось подготовить диагностический пакет GLPI: {exc}")
+        return redirect("catalog:instance_detail", pk=pk)
+    response["Content-Disposition"] = f'attachment; filename="glpi-diagnostics-{instance.catalog_code}.zip"'
+    return response
 
 
 @permission_required("catalog.change_instance", raise_exception=True)

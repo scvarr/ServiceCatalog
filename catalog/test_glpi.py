@@ -4,6 +4,7 @@ from django.contrib.auth.models import Permission, User
 from django.test import TestCase, override_settings
 from catalog.glpi import GlpiClient, GlpiDisabledError, GlpiError, normalize_computer
 from catalog.glpi_sync import sync_glpi_reference
+from catalog.glpi_diagnostics import build_glpi_diagnostic_archive
 from catalog.models import ExternalReference, GlpiComputerSnapshot, Instance, InstanceType
 
 
@@ -68,6 +69,27 @@ class GlpiClientTests(TestCase):
     def test_tls_verification_can_be_explicitly_disabled(self):
         with self.settings(GLPI_TLS_VERIFY=False):
             self.assertFalse(GlpiClient().verify)
+
+    def test_api_schema_returns_openapi_document(self):
+        session = Mock()
+        session.post.return_value = FakeResponse({"access_token": "top-secret-token", "expires_in": 3600})
+        session.get.return_value = FakeResponse({"openapi": "3.0.0", "paths": {"/Assets/Computer/{id}": {"get": {}}}})
+        schema, attempts = GlpiClient(session=session).get_api_schema()
+        self.assertEqual(schema["openapi"], "3.0.0")
+        self.assertEqual(attempts[0]["path"], "/api.php/v2.3/openapi.json")
+
+    @patch("catalog.glpi_diagnostics.get_glpi_client")
+    def test_diagnostic_archive_contains_redacted_sample_and_endpoint_list(self, get_client):
+        client = get_client.return_value
+        client.get_computer_payload.return_value = PAYLOAD
+        client.get_api_schema.return_value = ({"paths": {"/Assets/Computer/{id}": {"get": {}}, "/Assets/Computer": {"post": {}}}}, [])
+        reference = Mock(external_id="2713")
+        import zipfile
+        from io import BytesIO
+        with zipfile.ZipFile(BytesIO(build_glpi_diagnostic_archive(reference))) as package:
+            self.assertIn("openapi.json", package.namelist())
+            self.assertIn("/Assets/Computer/{id}", package.read("endpoints.json").decode())
+            self.assertIn("<redacted>", package.read("computer.sample.json").decode())
 
 
 class GlpiSyncTests(TestCase):
