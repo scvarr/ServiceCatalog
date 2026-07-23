@@ -5,6 +5,7 @@ from django.contrib.auth.models import Permission, User
 from django.test import TestCase, override_settings
 from catalog.glpi import GlpiClient, GlpiDisabledError, GlpiError, normalize_computer
 from catalog.glpi_import import create_glpi_import, normalize_import_candidates
+from catalog.glpi_database import GlpiDatabaseError
 from catalog.glpi_sync import sync_glpi_reference
 from catalog.glpi_diagnostics import build_glpi_diagnostic_archive
 from catalog.models import ExternalReference, GlpiComputerSnapshot, GlpiImportPayload, GlpiImportSession, Instance, InstanceType
@@ -204,6 +205,33 @@ class GlpiImportTests(TestCase):
         self.assertEqual(candidates["memory_total_gb"][0], "64")
         self.assertIn("PERC H730", candidates["raid_controller"][0])
         self.assertIn("VMware ESXi 8.0", candidates["hypervisor"][0])
+
+    def test_normalizes_processor_rows_from_database_fallback(self):
+        candidates = normalize_import_candidates({
+            "computer": PAYLOAD,
+            "processor": [
+                {"designation": "Intel Xeon E5606", "nbcores": 4},
+                {"designation": "Intel Xeon E5606", "nbcores": 4},
+            ],
+        }, processor_source="processor_db")
+        self.assertEqual(candidates["cpu_summary"], ("2 × Intel Xeon E5606", "processor_db", "grouped_names"))
+        self.assertEqual(candidates["core_count"], ("8", "processor_db", "sum_nbcores"))
+
+    @patch("catalog.glpi_import.get_glpi_database_client")
+    @patch("catalog.glpi_import.get_glpi_client")
+    def test_import_uses_database_processors_when_api_returns_empty_list(self, get_client, get_database_client):
+        client = get_client.return_value
+        client.get_computer_payload.return_value = PAYLOAD
+        client.get_computer_component_payload.side_effect = lambda _, key: []
+        client.get_computer_related_payload.return_value = []
+        get_database_client.return_value.get_computer_processors.return_value = [
+            {"designation": "Intel Xeon E5606", "nbcores": 4},
+            {"designation": "Intel Xeon E5606", "nbcores": 4},
+        ]
+        session = create_glpi_import(self.reference)
+        self.assertTrue(GlpiImportPayload.objects.get(session=session, endpoint_key="processor_db").payload)
+        self.assertEqual(session.candidates.get(field_key="cpu_summary").source, "processor_db")
+        self.assertEqual(session.candidates.get(field_key="core_count").proposed_value, "8")
 
     @patch("catalog.glpi_import.get_glpi_client")
     def test_import_keeps_successful_payloads_when_one_component_fails(self, get_client):

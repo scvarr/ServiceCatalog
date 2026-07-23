@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .glpi import GlpiError, get_glpi_client
+from .glpi_database import GlpiDatabaseDisabled, GlpiDatabaseError, get_glpi_database_client
 from .models import GlpiImportCandidate, GlpiImportPayload, GlpiImportSession, ServerProfile
 
 
@@ -46,7 +47,7 @@ def _mb_to_gb(value):
     return (_number(value) / Decimal(1024)).quantize(Decimal("0.01"))
 
 
-def normalize_import_candidates(payloads):
+def normalize_import_candidates(payloads, *, processor_source="processor"):
     """Return {profile_field: (value, source, normalization_rule)}."""
     computer = payloads.get("computer", {})
     candidates = {}
@@ -56,13 +57,13 @@ def normalize_import_candidates(payloads):
             candidates[field] = (value, "computer", "nested_name")
 
     processors = payloads.get("processor", [])
-    processor_names = [_nested_name(row.get("processor")) for row in processors]
+    processor_names = [_nested_name(row.get("processor")) or str(row.get("designation") or "") for row in processors]
     cpu_summary = _grouped(processor_names)
     if cpu_summary:
-        candidates["cpu_summary"] = (cpu_summary, "processor", "grouped_names")
+        candidates["cpu_summary"] = (cpu_summary, processor_source, "grouped_names")
     core_count = sum(int(_number(row.get("nbcores"))) for row in processors if _number(row.get("nbcores")) > 0)
     if core_count:
-        candidates["core_count"] = (str(core_count), "processor", "sum_nbcores")
+        candidates["core_count"] = (str(core_count), processor_source, "sum_nbcores")
 
     memory_mb = sum((_number(row.get("size")) for row in payloads.get("memory", [])), Decimal(0))
     if memory_mb:
@@ -104,6 +105,7 @@ def create_glpi_import(reference, user=None):
     )
     client = get_glpi_client()
     payloads = {}
+    payload_sources = {}
     failures = []
     collectors = [("computer", lambda: client.get_computer_payload(reference.external_id))]
     collectors += [(key, lambda key=key: client.get_computer_component_payload(reference.external_id, key)) for key in COMPONENT_COLLECTORS]
@@ -113,6 +115,19 @@ def create_glpi_import(reference, user=None):
             payload = collect()
             payloads[key] = payload
             GlpiImportPayload.objects.create(session=session, endpoint_key=key, http_status=200, payload=payload)
+            if key == "processor" and not payload:
+                try:
+                    database_payload = get_glpi_database_client().get_computer_processors(reference.external_id)
+                except GlpiDatabaseDisabled:
+                    pass
+                except GlpiDatabaseError as exc:
+                    failures.append("processor_db")
+                    GlpiImportPayload.objects.create(session=session, endpoint_key="processor_db", error=str(exc)[:500])
+                else:
+                    if database_payload:
+                        payloads["processor"] = database_payload
+                        payload_sources["processor"] = "processor_db"
+                        GlpiImportPayload.objects.create(session=session, endpoint_key="processor_db", payload=database_payload)
         except GlpiError as exc:
             failures.append(key)
             GlpiImportPayload.objects.create(session=session, endpoint_key=key, http_status=exc.http_status, error=str(exc)[:500])
@@ -122,7 +137,9 @@ def create_glpi_import(reference, user=None):
         session.error = "Не получен основной объект Computer."
     else:
         profile, _ = ServerProfile.objects.get_or_create(instance=reference.instance)
-        for field_key, (proposed_value, source, rule) in normalize_import_candidates(payloads).items():
+        for field_key, (proposed_value, source, rule) in normalize_import_candidates(
+            payloads, processor_source=payload_sources.get("processor", "processor")
+        ).items():
             current_value = getattr(profile, field_key, "") or ""
             GlpiImportCandidate.objects.create(
                 session=session,

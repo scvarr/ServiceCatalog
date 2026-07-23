@@ -92,3 +92,14 @@ GLPI_WEB_AUTH_SOURCE = os.environ.get("GLPI_WEB_AUTH_SOURCE", "")
 GLPI_CA_BUNDLE = os.environ.get("GLPI_CA_BUNDLE", "")
 GLPI_TIMEOUT_SECONDS = int(os.environ.get("GLPI_TIMEOUT_SECONDS", "15"))
 GLPI_TLS_VERIFY = os.environ.get("GLPI_TLS_VERIFY", "true").lower() == "true"
+
+# Optional, read-only fallback for GLPI component data.  The API remains the
+# primary source; currently the fallback is used for processors only when the
+# API returns an empty list.
+GLPI_DB_ENABLED = os.environ.get("GLPI_DB_ENABLED", "false").lower() == "true"
+GLPI_DB_HOST = os.environ.get("GLPI_DB_HOST", "")
+GLPI_DB_PORT = int(os.environ.get("GLPI_DB_PORT", "3306"))
+GLPI_DB_NAME = os.environ.get("GLPI_DB_NAME", "glpi")
+GLPI_DB_USER = os.environ.get("GLPI_DB_USER", "")
+GLPI_DB_PASSWORD = os.environ.get("GLPI_DB_PASSWORD", "")
+GLPI_DB_TIMEOUT_SECONDS = int(os.environ.get("GLPI_DB_TIMEOUT_SECONDS", "10"))
