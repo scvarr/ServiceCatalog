@@ -37,7 +37,7 @@ docker compose exec web python manage.py test
 
 ## Точечная синхронизация GLPI
 
-Интеграция по умолчанию отключена (`GLPI_ENABLED=false`). Для сервера задайте в `.env` `GLPI_ENABLED=true`, URL GLPI, OAuth client ID/secret, пользователя, пароль, версию `v2.3`, таймаут и при необходимости путь к CA bundle. TLS-проверка всегда включена.
+Интеграция по умолчанию отключена (`GLPI_ENABLED=false`). Для сервера задайте в `.env` `GLPI_ENABLED=true`, URL GLPI, OAuth client ID/secret, пользователя, пароль, версию `v2.3`, таймаут и при необходимости путь к CA bundle. TLS-проверка включена по умолчанию (`GLPI_TLS_VERIFY=true`); её можно явно отключить только для согласованного внутреннего контура (`GLPI_TLS_VERIFY=false`).
 
 В Django Admin откройте экземпляр и добавьте внешнюю ссылку: система `GLPI`, тип `Computer`, внешний ID `2713`. Затем используйте кнопку «Обновить данные из GLPI» на карточке экземпляра или выполните:
 

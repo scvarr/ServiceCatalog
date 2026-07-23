@@ -65,6 +65,10 @@ class GlpiClientTests(TestCase):
         self.assertIsNone(computer.serial_number)
         self.assertIsNone(computer.last_inventory_update)
 
+    def test_tls_verification_can_be_explicitly_disabled(self):
+        with self.settings(GLPI_TLS_VERIFY=False):
+            self.assertFalse(GlpiClient().verify)
+
 
 class GlpiSyncTests(TestCase):
     def setUp(self):

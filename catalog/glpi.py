@@ -66,6 +66,8 @@ class GlpiClient:
 
     @property
     def verify(self):
+        if not settings.GLPI_TLS_VERIFY:
+            return False
         return settings.GLPI_CA_BUNDLE or True
 
     def _require_config(self):

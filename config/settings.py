@@ -88,3 +88,4 @@ GLPI_USERNAME = os.environ.get("GLPI_USERNAME", "")
 GLPI_PASSWORD = os.environ.get("GLPI_PASSWORD", "")
 GLPI_CA_BUNDLE = os.environ.get("GLPI_CA_BUNDLE", "")
 GLPI_TIMEOUT_SECONDS = int(os.environ.get("GLPI_TIMEOUT_SECONDS", "15"))
+GLPI_TLS_VERIFY = os.environ.get("GLPI_TLS_VERIFY", "true").lower() == "true"
