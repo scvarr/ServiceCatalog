@@ -13,6 +13,8 @@
 
 Для доступа по DNS-имени добавьте его без порта в `DJANGO_ALLOWED_HOSTS`, например: `DJANGO_ALLOWED_HOSTS=ims01-ladm1.atomflot.ru,localhost,127.0.0.1`. На production-сервере установите `DJANGO_DEBUG=false`.
 
+Если приложение находится за HTTPS reverse proxy (например, Nginx Proxy Manager), добавьте полный origin в `DJANGO_CSRF_TRUSTED_ORIGINS`, например: `DJANGO_CSRF_TRUSTED_ORIGINS=https://svc.atomflot.ru`. В production Django принимает `X-Forwarded-Proto` от proxy и выставляет secure-флаги cookie.
+
 ## Разработка и проверки
 
 Запуск с bind mount и Django development server:
