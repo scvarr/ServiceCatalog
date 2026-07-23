@@ -16,6 +16,11 @@
       {% elif column.key == "included_at" %}{{ membership.included_at }}
       {% elif column.key == "catalog_code" %}{{ membership.instance.catalog_code }}
       {% elif column.key == "source" %}{{ membership.instance.get_source_display }}
+      {% elif column.key == "profile_model" %}{{ membership.instance.server_profile.model|default:"—" }}
+      {% elif column.key == "cpu_summary" %}{{ membership.instance.server_profile.cpu_summary|default:"—" }}
+      {% elif column.key == "memory_total" %}{{ membership.instance.server_profile.memory_total_gb|default:"—" }}
+      {% elif column.key == "raid_controller" %}{{ membership.instance.server_profile.raid_controller|default:"—" }}
+      {% elif column.key == "risk_level" %}{{ membership.instance.server_profile.get_risk_level_display|default:"—" }}
       {% endif %}
     </td>
     {% endfor %}

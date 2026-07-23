@@ -101,6 +101,9 @@ class GlpiClient:
             raise GlpiError("GLPI вернул некорректный ответ токена.") from exc
 
     def get_computer(self, computer_id: int | str) -> GlpiComputer:
+        return normalize_computer(self.get_computer_payload(computer_id))
+
+    def get_computer_payload(self, computer_id: int | str) -> dict[str, Any]:
         token = self._token()
         try:
             response = self.session.get(
@@ -109,7 +112,10 @@ class GlpiClient:
                 timeout=settings.GLPI_TIMEOUT_SECONDS, verify=self.verify,
             )
             response.raise_for_status()
-            return normalize_computer(response.json())
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("Computer payload is not an object")
+            return payload
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else "?"
             raise GlpiError(f"GLPI вернул HTTP {status} при получении компьютера.") from exc

@@ -37,6 +37,14 @@ INSTANCE_COLUMNS = (
     ListColumn("catalog_code", "Код"),
     ListColumn("source", "Источник"),
     ListColumn("services", "Услуги"),
+    ListColumn("profile_model", "Модель"),
+    ListColumn("cpu_summary", "Процессор"),
+    ListColumn("memory_total", "Память, ГБ"),
+    ListColumn("raid_controller", "RAID"),
+    ListColumn("hypervisor", "Гипервизор"),
+    ListColumn("commissioned", "Ввод в эксплуатацию"),
+    ListColumn("risk_level", "Риск"),
+    ListColumn("replacement_year", "План замены"),
 )
 
 SERVICE_MEMBERSHIP_COLUMNS = (
@@ -45,6 +53,11 @@ SERVICE_MEMBERSHIP_COLUMNS = (
     ListColumn("included_at", "Включен", default=True),
     ListColumn("catalog_code", "Код"),
     ListColumn("source", "Источник"),
+    ListColumn("profile_model", "Модель"),
+    ListColumn("cpu_summary", "Процессор"),
+    ListColumn("memory_total", "Память, ГБ"),
+    ListColumn("raid_controller", "RAID"),
+    ListColumn("risk_level", "Риск"),
 )
 
 GLPI_COMPUTER_COLUMNS = (

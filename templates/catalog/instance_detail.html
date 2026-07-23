@@ -2,10 +2,12 @@
 {% block content %}
 <h1>{{ instance.name }}</h1>
 <div class="table-wrap"><table class="data-table details-table"><tr><th>Код</th><th>Тип</th><th>Состояние</th><th>Источник</th></tr><tr><td>{{ instance.catalog_code }}</td><td>{{ instance.instance_type }}</td><td>{{ instance.get_status_display }}</td><td>{{ instance.get_source_display }}</td></tr></table></div>
+{% if instance.server_profile %}<h2>Краткая конфигурация</h2><div class="table-wrap"><table class="data-table"><tr><th>Производитель / модель</th><th>Процессор</th><th>Ядра</th><th>Память</th><th>RAID</th><th>Гипервизор</th></tr><tr><td>{{ instance.server_profile.manufacturer|default:"—" }} / {{ instance.server_profile.model|default:"—" }}</td><td>{{ instance.server_profile.cpu_summary|default:"—" }}</td><td>{{ instance.server_profile.core_count|default:"—" }}</td><td>{{ instance.server_profile.memory_total_gb|default:"—" }}</td><td>{{ instance.server_profile.raid_controller|default:"—" }}</td><td>{{ instance.server_profile.hypervisor|default:"—" }}</td></tr></table></div><h2>Эксплуатационная оценка</h2><p>Риск: {{ instance.server_profile.get_risk_level_display }}. {{ instance.server_profile.risk_reason|default:"" }} {{ instance.server_profile.risk_recommendation|default:"" }}</p>{% endif %}
 
 <h2>Данные GLPI</h2>
 {% if glpi_reference %}
   {% if perms.catalog.change_instance %}<form method="post" action="{% url 'catalog:sync_glpi_instance' instance.pk %}">{% csrf_token %}<button>Обновить данные из GLPI</button></form>{% endif %}
+  {% if perms.catalog.change_instance %}<form method="post" action="{% url 'catalog:import_glpi_instance' instance.pk %}">{% csrf_token %}<button>Подготовить импорт GLPI</button></form>{% endif %}
   {% include "catalog/includes/glpi_columns_controls.html" %}
   {% with data=glpi_reference.glpi_computer %}
   <div class="table-wrap"><table class="data-table"><tr>{% for column in visible_glpi_columns %}<th>{{ column.label }}</th>{% endfor %}</tr><tr>
@@ -33,6 +35,7 @@
   </tr></table></div>
   {% endwith %}
 {% else %}<p>Внешняя ссылка GLPI Computer не задана.</p>{% endif %}
+{% if latest_glpi_import %}<h2>Предложения GLPI</h2><p>{{ latest_glpi_import.get_status_display }} · {{ latest_glpi_import.created_at }}</p>{% if latest_glpi_import.candidates.all %}<form method="post" action="{% url 'catalog:apply_glpi_import' instance.pk latest_glpi_import.pk %}">{% csrf_token %}<div class="table-wrap"><table class="data-table"><tr><th>Применить</th><th>Поле</th><th>Текущее</th><th>Предложено</th><th>Правило</th></tr>{% for candidate in latest_glpi_import.candidates.all %}<tr><td>{% if candidate.decision == 'pending' %}<input type="checkbox" name="candidate_ids" value="{{ candidate.pk }}">{% else %}{{ candidate.get_decision_display }}{% endif %}</td><td>{{ candidate.field_key }}</td><td>{{ candidate.current_value|default:"—" }}</td><td>{{ candidate.proposed_value|default:"—" }}</td><td>{{ candidate.rule }}</td></tr>{% endfor %}</table></div><button>Применить выбранное</button></form>{% endif %}{% if perms.catalog.delete_instance %}<details><summary>Сырой JSON GLPI</summary>{% for payload in latest_glpi_import.payloads.all %}<pre>{{ payload.payload }}</pre>{% endfor %}</details>{% endif %}{% endif %}
 
 <h2>Услуги</h2><div class="table-wrap"><table class="data-table"><tr><th>Услуга</th><th>Включен</th><th>Исключен</th></tr>{% for m in memberships %}<tr><td><a href="{% url 'catalog:service_detail' m.service.pk %}">{{ m.service }}</a></td><td>{{ m.included_at }}</td><td>{{ m.excluded_at|default:"По настоящее время" }}</td></tr>{% empty %}<tr><td colspan="3">Нет связей.</td></tr>{% endfor %}</table></div>
 {% endblock %}

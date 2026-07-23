@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Prefetch
 
-from catalog.models import ExternalReference, Instance, Service, ServiceMembership
+from catalog.models import ActualServiceMetric, ExternalReference, Instance, Service, ServiceMembership, ServiceMetricCategory
 from .models import (
     Contract,
     ContractActualSnapshot,
@@ -39,9 +39,23 @@ def _allowed_delta(term):
     return term.tolerance_value
 
 
+def actual_metric_for_category(category, active_instance_ids=None):
+    if not category:
+        return None, None, None
+    if category.actual_value_method == "member_count":
+        return Decimal(len(active_instance_ids or ())), "calculated", None
+    metric = category.actual_metrics.order_by("-effective_at", "-created_at").first()
+    if not metric:
+        return None, None, None
+    return metric.value, metric.source, metric.effective_at
+
+
 def _comparison_result(term, actual_ids, positions, include_details):
     actual_ids = set(actual_ids)
     active_count = len(actual_ids)
+    actual_value, actual_source, actual_at = actual_metric_for_category(term.metric_category, actual_ids)
+    if actual_value is None and not term.metric_category_id:
+        actual_value, actual_source = Decimal(active_count), "calculated"
     mode = term.accounting_mode
     named_required = mode in {ContractServiceTerm.AccountingMode.NAMED, ContractServiceTerm.AccountingMode.MIXED}
     quantitative_required = mode in {ContractServiceTerm.AccountingMode.QUANTITATIVE, ContractServiceTerm.AccountingMode.MIXED}
@@ -51,8 +65,8 @@ def _comparison_result(term, actual_ids, positions, include_details):
     added_ids = actual_ids - matched_ids
     missing_positions = [position for position in matched_positions if position.instance_id not in actual_ids]
     unresolved = [position for position in positions if position.match_status in {NamedContractPosition.MatchStatus.UNMATCHED, NamedContractPosition.MatchStatus.AMBIGUOUS}]
-    incomplete = (quantitative_required and term.contracted_quantity is None) or (named_required and (not positions or unresolved))
-    quantity_delta = active_count - term.contracted_quantity if quantitative_required and term.contracted_quantity is not None else None
+    incomplete = (quantitative_required and (term.contracted_quantity is None or actual_value is None)) or (named_required and (not positions or unresolved))
+    quantity_delta = actual_value - term.contracted_quantity if quantitative_required and term.contracted_quantity is not None and actual_value is not None else None
     allowed_delta = _allowed_delta(term) if quantitative_required else None
     composition_changed = named_required and bool(added_ids or missing_positions)
 
@@ -74,10 +88,13 @@ def _comparison_result(term, actual_ids, positions, include_details):
         "service": term.service,
         "mode": mode,
         "contract_quantity": term.contracted_quantity if quantitative_required else len(positions),
-        "actual_quantity": active_count,
+        "actual_quantity": actual_value if quantitative_required else active_count,
+        "actual_source": actual_source,
+        "actual_at": actual_at,
+        "unit": term.unit or (term.metric_category.unit if term.metric_category_id else None),
         "quantity_delta": quantity_delta,
         "allowed_delta": allowed_delta,
-        "percent_delta": None if not quantitative_required or not term.contracted_quantity else Decimal(quantity_delta) * Decimal("100") / Decimal(term.contracted_quantity),
+        "percent_delta": None if not quantitative_required or not term.contracted_quantity or quantity_delta is None else Decimal(quantity_delta) * Decimal("100") / Decimal(term.contracted_quantity),
         "status": status,
         "status_label": STATUS_LABELS[status],
         "composition_changed": composition_changed,
@@ -155,7 +172,13 @@ def populate_contract_from_actual(contract, user=None):
         raise ValidationError("Заполнение из актуального состояния доступно только для черновика.")
     if ContractActualSnapshot.objects.filter(contract=contract).exists():
         raise ValidationError("Черновик уже был заполнен из актуального состояния.")
-    services = list(Service.objects.select_for_update().filter(is_active=True).order_by("name"))
+    categories = list(ServiceMetricCategory.objects.select_for_update().select_related("service", "unit").filter(is_active=True, service__is_active=True).order_by("service__name", "name"))
+    category_service_ids = {category.service_id for category in categories}
+    from catalog.models import UnitOfMeasure
+    pcs, _ = UnitOfMeasure.objects.get_or_create(code="pcs", defaults={"name": "Штука", "symbol": "шт."})
+    for service in Service.objects.select_for_update().filter(is_active=True).exclude(pk__in=category_service_ids):
+        categories.append(ServiceMetricCategory.objects.create(service=service, code=f"default-{service.pk}", name=service.name, unit=pcs, actual_value_method=ServiceMetricCategory.ActualValueMethod.MEMBER_COUNT))
+    services = list({category.service for category in categories})
     memberships = list(
         ServiceMembership.objects.select_for_update().filter(service__in=services, status=ServiceMembership.Status.ACTIVE)
         .select_related("instance__instance_type").prefetch_related(
@@ -166,18 +189,20 @@ def populate_contract_from_actual(contract, user=None):
     for membership in memberships:
         members_by_service[membership.service_id].append(membership.instance)
     snapshot = ContractActualSnapshot.objects.create(contract=contract, captured_by=user)
-    for service in services:
-        instances = members_by_service[service.pk]
+    for category in categories:
+        service = category.service
+        instances = members_by_service[service.pk] if category.actual_value_method == "member_count" else []
         mode = service.default_accounting_mode
+        actual_value, _, _ = actual_metric_for_category(category, [instance.pk for instance in instances])
         term = ContractServiceTerm.objects.create(
-            contract=contract, service=service, accounting_mode=mode,
-            contracted_quantity=len(instances) if mode in {"quantitative", "mixed"} else None,
+            contract=contract, service=service, metric_category=category, line_description=category.name, location=category.location, unit=category.unit, accounting_mode=mode,
+            contracted_quantity=actual_value if mode in {"quantitative", "mixed"} else None,
             tolerance_type=ContractServiceTerm.ToleranceType.ABSOLUTE, tolerance_value=Decimal("0"),
             created_by=user, updated_by=user,
         )
         snapshot_service = ContractActualSnapshotService.objects.create(
-            snapshot=snapshot, service=service, contract_term=term, service_code=service.code or "",
-            service_name=service.name, accounting_mode=mode, actual_quantity=len(instances),
+            snapshot=snapshot, service=service, metric_category=category, contract_term=term, service_code=service.code or "",
+            service_name=category.name, accounting_mode=mode, actual_quantity=actual_value or 0,
         )
         for instance in instances:
             reference = next(iter(getattr(instance, "glpi_computer_references", [])), None)

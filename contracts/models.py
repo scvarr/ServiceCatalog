@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
-from catalog.models import Instance, Service, TimeStampedModel
+from catalog.models import Instance, Service, ServiceMetricCategory, TimeStampedModel, UnitOfMeasure
 
 
 class Contract(TimeStampedModel):
@@ -50,8 +50,12 @@ class ContractServiceTerm(TimeStampedModel):
 
     contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name="service_terms", verbose_name="договор")
     service = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="contract_terms", verbose_name="услуга")
+    metric_category = models.ForeignKey(ServiceMetricCategory, on_delete=models.PROTECT, null=True, blank=True, related_name="contract_terms", verbose_name="категория учета")
+    line_description = models.CharField("описание позиции", max_length=255, blank=True)
+    location = models.CharField("место оказания", max_length=255, blank=True)
+    unit = models.ForeignKey(UnitOfMeasure, on_delete=models.PROTECT, null=True, blank=True, related_name="contract_terms", verbose_name="единица")
     accounting_mode = models.CharField("способ учета", max_length=16, choices=AccountingMode)
-    contracted_quantity = models.PositiveIntegerField("договорное количество", null=True, blank=True)
+    contracted_quantity = models.DecimalField("договорное количество", max_digits=14, decimal_places=3, null=True, blank=True)
     tolerance_type = models.CharField("тип допуска", max_length=16, choices=ToleranceType, default=ToleranceType.ABSOLUTE)
     tolerance_value = models.DecimalField("допуск", max_digits=10, decimal_places=2, default=Decimal("0"))
     quantitative_reserve = models.PositiveIntegerField("количественный резерв", null=True, blank=True)
@@ -62,7 +66,7 @@ class ContractServiceTerm(TimeStampedModel):
     class Meta:
         verbose_name = "условие услуги договора"
         verbose_name_plural = "условия услуг договора"
-        constraints = [models.UniqueConstraint(fields=["contract", "service"], name="unique_contract_service_term")]
+        constraints = [models.UniqueConstraint(fields=["contract", "metric_category"], condition=Q(metric_category__isnull=False), name="unique_contract_metric_category")]
         indexes = [models.Index(fields=["contract", "accounting_mode"])]
 
     def clean(self):
@@ -71,6 +75,8 @@ class ContractServiceTerm(TimeStampedModel):
             raise ValidationError("Для количественного или смешанного учета укажите договорное количество.")
         if not quantity_required and self.contracted_quantity is not None:
             raise ValidationError("Договорное количество допустимо только для количественного или смешанного учета.")
+        if self.metric_category and self.unit and self.metric_category.unit_id != self.unit_id:
+            raise ValidationError("Единица позиции должна совпадать с единицей категории учета.")
 
     @property
     def allowed_upper_limit(self):
@@ -158,15 +164,16 @@ class ContractActualSnapshotService(TimeStampedModel):
     snapshot = models.ForeignKey(ContractActualSnapshot, on_delete=models.CASCADE, related_name="services", verbose_name="снимок")
     service = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="actual_snapshot_services", verbose_name="услуга")
     contract_term = models.OneToOneField(ContractServiceTerm, on_delete=models.SET_NULL, null=True, blank=True, related_name="actual_snapshot_service", verbose_name="условие договора")
+    metric_category = models.ForeignKey(ServiceMetricCategory, on_delete=models.PROTECT, null=True, blank=True, related_name="snapshot_services", verbose_name="категория учета")
     service_code = models.CharField("код услуги", max_length=64, blank=True)
     service_name = models.CharField("наименование услуги", max_length=255)
     accounting_mode = models.CharField("способ учета", max_length=16, choices=ContractServiceTerm.AccountingMode.choices)
-    actual_quantity = models.PositiveIntegerField("актуальное количество")
+    actual_quantity = models.DecimalField("актуальное количество", max_digits=14, decimal_places=3)
 
     class Meta:
         verbose_name = "услуга в снимке договора"
         verbose_name_plural = "услуги в снимке договора"
-        constraints = [models.UniqueConstraint(fields=["snapshot", "service"], name="contracts_snapshot_service_unique")]
+        constraints = [models.UniqueConstraint(fields=["snapshot", "metric_category"], condition=Q(metric_category__isnull=False), name="contracts_snapshot_category_unique")]
 
 
 class ContractActualSnapshotInstance(TimeStampedModel):

@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from .glpi import GlpiError
 from .glpi_sync import sync_glpi_reference
+from .glpi_import import apply_glpi_candidates, create_glpi_import
 from .listing import (
     DEFAULT_PAGE_SIZE,
     GLPI_COMPUTER_COLUMNS,
@@ -19,7 +20,7 @@ from .listing import (
     query_string,
     visible_columns,
 )
-from .models import ExternalReference, Instance, InstanceType, ListViewPreference, Service, ServiceMembership
+from .models import ActualServiceMetric, ExternalReference, GlpiImportSession, Instance, InstanceType, ListViewPreference, Service, ServiceMembership, ServiceMetricCategory
 
 
 LIST_PARAMETERS = {
@@ -145,7 +146,7 @@ def service_detail(request, pk):
 
     keys, page_size = _list_state(request, page_key, SERVICE_MEMBERSHIP_COLUMNS)
     query = request.GET.get("q", "").strip()
-    memberships = service.memberships.select_related("instance__instance_type").filter(status=ServiceMembership.Status.ACTIVE)
+    memberships = service.memberships.select_related("instance__instance_type", "instance__server_profile").filter(status=ServiceMembership.Status.ACTIVE)
     if query:
         memberships = memberships.filter(
             Q(instance__name__icontains=query)
@@ -188,7 +189,8 @@ def instance_list(request):
     query = request.GET.get("q", "").strip()
     selected_type = request.GET.get("type", "")
     selected_status = request.GET.get("status", "")
-    instances = Instance.objects.select_related("instance_type")
+    profile_keys = {"profile_model", "cpu_summary", "memory_total", "raid_controller", "hypervisor", "commissioned", "risk_level", "replacement_year"}
+    instances = Instance.objects.select_related("instance_type", *(["server_profile"] if profile_keys & set(keys) else []))
     if query:
         related_service_matches = ServiceMembership.objects.filter(
             instance_id=OuterRef("pk"), status=ServiceMembership.Status.ACTIVE
@@ -231,7 +233,7 @@ def instance_list(request):
 
 @login_required
 def instance_detail(request, pk):
-    instance = get_object_or_404(Instance.objects.select_related("instance_type"), pk=pk)
+    instance = get_object_or_404(Instance.objects.select_related("instance_type", "server_profile"), pk=pk)
     page_key = ListViewPreference.PageKey.GLPI_COMPUTER_DATA
     post_response = _save_preference(request, page_key, GLPI_COMPUTER_COLUMNS)
     if post_response:
@@ -240,6 +242,7 @@ def instance_detail(request, pk):
     memberships = instance.service_memberships.select_related("service").all()
     glpi_reference = instance.external_references.filter(source_system="glpi", external_object_type="Computer").select_related("glpi_computer").first()
     glpi_keys, _ = _list_state(request, page_key, GLPI_COMPUTER_COLUMNS)
+    latest_import = instance.glpi_import_sessions.order_by("-created_at").prefetch_related("candidates", "payloads").first()
     return render(
         request,
         "catalog/instance_detail.html",
@@ -251,8 +254,31 @@ def instance_detail(request, pk):
             "visible_glpi_columns": column_specs(glpi_keys, GLPI_COMPUTER_COLUMNS),
             "visible_glpi_column_keys": glpi_keys,
             "glpi_page_key": page_key,
+            "latest_glpi_import": latest_import,
         },
     )
+
+
+@permission_required("catalog.change_instance", raise_exception=True)
+def import_glpi_instance(request, pk):
+    instance = get_object_or_404(Instance, pk=pk)
+    if request.method == "POST":
+        reference = instance.external_references.filter(source_system="glpi", external_object_type="Computer").first()
+        if not reference:
+            messages.error(request, "Для экземпляра не задана внешняя ссылка GLPI Computer.")
+        else:
+            session = create_glpi_import(reference, request.user)
+            messages.success(request, "Импорт GLPI подготовлен." if session.status == "completed" else "Импорт GLPI завершился с ошибкой.")
+    return redirect("catalog:instance_detail", pk=pk)
+
+
+@permission_required("catalog.change_instance", raise_exception=True)
+def apply_glpi_import(request, pk, session_pk):
+    session = get_object_or_404(GlpiImportSession, pk=session_pk, instance_id=pk)
+    if request.method == "POST":
+        apply_glpi_candidates(session, request.POST.getlist("candidate_ids"), request.user)
+        messages.success(request, "Выбранные предложения GLPI применены.")
+    return redirect("catalog:instance_detail", pk=pk)
 
 
 @permission_required("catalog.change_instance", raise_exception=True)

@@ -15,6 +15,14 @@
       {% elif column.key == "source" %}{{ instance.get_source_display }}
       {% elif column.key == "services" %}
         {% for membership in instance.active_memberships %}<a href="{% url 'catalog:service_detail' membership.service.pk %}">{{ membership.service.name }}</a>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+      {% elif column.key == "profile_model" %}{{ instance.server_profile.model|default:"—" }}
+      {% elif column.key == "cpu_summary" %}{{ instance.server_profile.cpu_summary|default:"—" }}
+      {% elif column.key == "memory_total" %}{{ instance.server_profile.memory_total_gb|default:"—" }}
+      {% elif column.key == "raid_controller" %}{{ instance.server_profile.raid_controller|default:"—" }}
+      {% elif column.key == "hypervisor" %}{{ instance.server_profile.hypervisor|default:"—" }}
+      {% elif column.key == "commissioned" %}{{ instance.server_profile.commissioning_display|default:"—" }}
+      {% elif column.key == "risk_level" %}{{ instance.server_profile.get_risk_level_display|default:"—" }}
+      {% elif column.key == "replacement_year" %}{{ instance.server_profile.replacement_year|default:"—" }}
       {% endif %}
     </td>
     {% endfor %}

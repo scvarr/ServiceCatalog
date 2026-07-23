@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ExternalReference, GlpiComputerSnapshot, Instance, InstanceType, ListViewPreference, Service, ServiceMembership
+from .models import ActualServiceMetric, ExternalReference, GlpiComputerSnapshot, GlpiImportCandidate, GlpiImportPayload, GlpiImportSession, Instance, InstanceType, ListViewPreference, ServerProfile, Service, ServiceMembership, ServiceMetricCategory, UnitOfMeasure
 
 
 @admin.register(InstanceType)
@@ -52,6 +52,9 @@ class ExternalReferenceAdmin(admin.ModelAdmin):
 class GlpiComputerSnapshotAdmin(admin.ModelAdmin):
     list_display = ("reference", "external_name", "inventory_number", "external_status", "last_inventory_update")
     readonly_fields = tuple(field.name for field in GlpiComputerSnapshot._meta.fields)
+
+
+admin.site.register((UnitOfMeasure, ServiceMetricCategory, ActualServiceMetric, ServerProfile, GlpiImportSession, GlpiImportPayload, GlpiImportCandidate))
 
 
 @admin.register(ListViewPreference)
