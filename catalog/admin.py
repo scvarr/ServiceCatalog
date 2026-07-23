@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Instance, InstanceType, Service, ServiceMembership
+from .models import ExternalReference, GlpiComputerSnapshot, Instance, InstanceType, Service, ServiceMembership
 
 
 @admin.register(InstanceType)
@@ -9,11 +9,20 @@ class InstanceTypeAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
+class ExternalReferenceInline(admin.TabularInline):
+    model = ExternalReference
+    extra = 0
+    fields = ("source_system", "external_object_type", "external_id", "external_url", "last_sync_status", "last_synced_at", "last_sync_error")
+    readonly_fields = ("last_sync_status", "last_synced_at", "last_sync_error")
+
+
 @admin.register(Instance)
 class InstanceAdmin(admin.ModelAdmin):
     list_display = ("catalog_code", "name", "instance_type", "status", "source", "updated_at")
     list_filter = ("instance_type", "status", "source")
     search_fields = ("catalog_code", "name")
+    readonly_fields = ("catalog_code",)
+    inlines = (ExternalReferenceInline,)
 
 
 @admin.register(Service)
@@ -29,3 +38,17 @@ class ServiceMembershipAdmin(admin.ModelAdmin):
     list_display = ("service", "instance", "included_at", "excluded_at", "status")
     list_filter = ("status", "service")
     search_fields = ("service__code", "instance__catalog_code", "instance__name")
+
+
+@admin.register(ExternalReference)
+class ExternalReferenceAdmin(admin.ModelAdmin):
+    list_display = ("instance", "source_system", "external_object_type", "external_id", "last_sync_status", "last_synced_at")
+    list_filter = ("source_system", "external_object_type", "last_sync_status")
+    search_fields = ("instance__catalog_code", "external_id")
+    readonly_fields = ("last_synced_at", "last_sync_status", "last_sync_error")
+
+
+@admin.register(GlpiComputerSnapshot)
+class GlpiComputerSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("reference", "external_name", "inventory_number", "external_status", "last_inventory_update")
+    readonly_fields = tuple(field.name for field in GlpiComputerSnapshot._meta.fields)

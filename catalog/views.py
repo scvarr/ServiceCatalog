@@ -1,7 +1,10 @@
-from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Count, Q
-from django.shortcuts import get_object_or_404, render
-from .models import Instance, InstanceType, Service
+from django.shortcuts import get_object_or_404, redirect, render
+from .glpi import GlpiError
+from .glpi_sync import sync_glpi_reference
+from .models import ExternalReference, Instance, InstanceType, Service
 
 
 @login_required
@@ -34,4 +37,22 @@ def instance_list(request):
 def instance_detail(request, pk):
     instance = get_object_or_404(Instance.objects.select_related("instance_type"), pk=pk)
     memberships = instance.service_memberships.select_related("service").all()
-    return render(request, "catalog/instance_detail.html", {"instance": instance, "memberships": memberships})
+    glpi_reference = instance.external_references.filter(source_system="glpi", external_object_type="Computer").select_related("glpi_computer").first()
+    return render(request, "catalog/instance_detail.html", {"instance": instance, "memberships": memberships, "glpi_reference": glpi_reference})
+
+
+@permission_required("catalog.change_instance", raise_exception=True)
+def sync_glpi_instance(request, pk):
+    if request.method != "POST":
+        return redirect("catalog:instance_detail", pk=pk)
+    instance = get_object_or_404(Instance, pk=pk)
+    reference = instance.external_references.filter(source_system="glpi", external_object_type="Computer").first()
+    if not reference:
+        messages.error(request, "Для экземпляра не задана внешняя ссылка GLPI Computer.")
+    else:
+        try:
+            sync_glpi_reference(reference)
+            messages.success(request, "Данные из GLPI успешно обновлены.")
+        except GlpiError as exc:
+            messages.error(request, f"Не удалось обновить данные GLPI: {exc}")
+    return redirect("catalog:instance_detail", pk=pk)

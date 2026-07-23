@@ -126,3 +126,58 @@ class ServiceMembership(TimeStampedModel):
     @property
     def is_current(self):
         return self.status == self.Status.ACTIVE and self.included_at <= timezone.localdate()
+
+
+class ExternalReference(TimeStampedModel):
+    class SourceSystem(models.TextChoices):
+        GLPI = "glpi", "GLPI"
+
+    class SyncStatus(models.TextChoices):
+        PENDING = "pending", "Не синхронизировано"
+        SUCCESS = "success", "Успешно"
+        ERROR = "error", "Ошибка"
+
+    instance = models.ForeignKey(Instance, on_delete=models.CASCADE, related_name="external_references", verbose_name="экземпляр")
+    source_system = models.CharField("внешняя система", max_length=32, choices=SourceSystem)
+    external_object_type = models.CharField("тип внешнего объекта", max_length=64)
+    external_id = models.CharField("внешний ID", max_length=255)
+    external_url = models.URLField("ссылка", blank=True)
+    last_synced_at = models.DateTimeField("последняя успешная синхронизация", null=True, blank=True)
+    last_sync_status = models.CharField("статус синхронизации", max_length=16, choices=SyncStatus, default=SyncStatus.PENDING)
+    last_sync_error = models.CharField("последняя ошибка", max_length=500, blank=True)
+
+    class Meta:
+        verbose_name = "внешняя ссылка"
+        verbose_name_plural = "внешние ссылки"
+        constraints = [models.UniqueConstraint(fields=["source_system", "external_object_type", "external_id"], name="unique_external_object")]
+        indexes = [models.Index(fields=["instance", "source_system"], name="cat_ext_inst_src_idx")]
+
+    def __str__(self):
+        return f"{self.source_system}: {self.external_object_type} #{self.external_id}"
+
+
+class GlpiComputerSnapshot(TimeStampedModel):
+    reference = models.OneToOneField(ExternalReference, on_delete=models.CASCADE, related_name="glpi_computer", verbose_name="внешняя ссылка")
+    external_name = models.CharField("имя в GLPI", max_length=255, blank=True)
+    inventory_number = models.CharField("инвентарный номер", max_length=255, blank=True)
+    serial_number = models.CharField("серийный номер", max_length=255, blank=True)
+    external_uuid = models.CharField("UUID", max_length=255, blank=True)
+    external_status = models.CharField("статус GLPI", max_length=255, blank=True)
+    manufacturer = models.CharField("производитель", max_length=255, blank=True)
+    model = models.CharField("модель", max_length=255, blank=True)
+    external_type = models.CharField("тип GLPI", max_length=255, blank=True)
+    location = models.CharField("местоположение", max_length=255, blank=True)
+    entity_name = models.CharField("сущность", max_length=255, blank=True)
+    comment = models.TextField("комментарий GLPI", blank=True)
+    inventory_source = models.CharField("источник инвентаризации", max_length=255, blank=True)
+    external_created_at = models.DateTimeField("создан в GLPI", null=True, blank=True)
+    external_updated_at = models.DateTimeField("изменен в GLPI", null=True, blank=True)
+    last_inventory_update = models.DateTimeField("последняя инвентаризация", null=True, blank=True)
+    last_boot = models.DateTimeField("последняя загрузка", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "данные компьютера GLPI"
+        verbose_name_plural = "данные компьютеров GLPI"
+
+    def __str__(self):
+        return self.external_name or str(self.reference)

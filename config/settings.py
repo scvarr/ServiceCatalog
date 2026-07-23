@@ -72,3 +72,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "catalog:service_list"
 LOGOUT_REDIRECT_URL = "login"
+
+GLPI_ENABLED = os.environ.get("GLPI_ENABLED", "false").lower() == "true"
+GLPI_BASE_URL = os.environ.get("GLPI_BASE_URL", "").rstrip("/")
+GLPI_API_VERSION = os.environ.get("GLPI_API_VERSION", "v2.3")
+GLPI_CLIENT_ID = os.environ.get("GLPI_CLIENT_ID", "")
+GLPI_CLIENT_SECRET = os.environ.get("GLPI_CLIENT_SECRET", "")
+GLPI_USERNAME = os.environ.get("GLPI_USERNAME", "")
+GLPI_PASSWORD = os.environ.get("GLPI_PASSWORD", "")
+GLPI_CA_BUNDLE = os.environ.get("GLPI_CA_BUNDLE", "")
+GLPI_TIMEOUT_SECONDS = int(os.environ.get("GLPI_TIMEOUT_SECONDS", "15"))
