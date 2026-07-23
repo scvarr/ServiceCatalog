@@ -4,4 +4,6 @@ __pycache__
 *.py[cod]
 staticfiles
 media
-
+# Never include a local module that could shadow the installed Django package.
+django.py
+django/
