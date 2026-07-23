@@ -1,4 +1,5 @@
 from datetime import date
+import json
 from unittest.mock import Mock, patch
 from django.contrib.auth.models import Permission, User
 from django.test import TestCase, override_settings
@@ -9,8 +10,10 @@ from catalog.models import ExternalReference, GlpiComputerSnapshot, Instance, In
 
 
 class FakeResponse:
-    def __init__(self, payload, status=200):
+    def __init__(self, payload, status=200, content_type="application/json"):
         self.payload, self.status_code = payload, status
+        self.headers = {"Content-Type": content_type}
+        self.text = payload if isinstance(payload, str) else json.dumps(payload)
 
     def json(self):
         return self.payload
@@ -74,20 +77,34 @@ class GlpiClientTests(TestCase):
         session = Mock()
         session.post.return_value = FakeResponse({"access_token": "top-secret-token", "expires_in": 3600})
         session.get.return_value = FakeResponse({"openapi": "3.0.0", "paths": {"/Assets/Computer/{id}": {"get": {}}}})
-        schema, attempts = GlpiClient(session=session).get_api_schema()
+        schema, attempts, documents = GlpiClient(session=session).get_api_schema()
         self.assertEqual(schema["openapi"], "3.0.0")
         self.assertEqual(attempts[0]["path"], "/api.php/v2.3/openapi.json")
+        self.assertEqual(documents, {})
+
+    def test_api_schema_follows_openapi_url_from_documentation_page(self):
+        session = Mock()
+        session.post.return_value = FakeResponse({"access_token": "top-secret-token", "expires_in": 3600})
+        missing = FakeResponse({"error": "not found"}, 404)
+        documentation = FakeResponse('<script>const ui = SwaggerUIBundle({url: "/api.php/v2.3/schema.json"});</script>', content_type="text/html")
+        schema = FakeResponse({"openapi": "3.0.0", "paths": {"/Assets/Computer": {"get": {}}}})
+        session.get.side_effect = [missing, missing, documentation, missing, schema]
+        result, attempts, documents = GlpiClient(session=session).get_api_schema()
+        self.assertEqual(result["openapi"], "3.0.0")
+        self.assertIn("api.php-v2.3-doc", documents)
+        self.assertEqual(attempts[-1]["path"], "/api.php/v2.3/schema.json")
 
     @patch("catalog.glpi_diagnostics.get_glpi_client")
     def test_diagnostic_archive_contains_redacted_sample_and_endpoint_list(self, get_client):
         client = get_client.return_value
         client.get_computer_payload.return_value = PAYLOAD
-        client.get_api_schema.return_value = ({"paths": {"/Assets/Computer/{id}": {"get": {}}, "/Assets/Computer": {"post": {}}}}, [])
+        client.get_api_schema.return_value = ({"paths": {"/Assets/Computer/{id}": {"get": {}}, "/Assets/Computer": {"post": {}}}}, [], {"api.php-doc": "<html>docs</html>"})
         reference = Mock(external_id="2713")
         import zipfile
         from io import BytesIO
         with zipfile.ZipFile(BytesIO(build_glpi_diagnostic_archive(reference))) as package:
             self.assertIn("openapi.json", package.namelist())
+            self.assertIn("documentation/api.php-doc.html", package.namelist())
             self.assertIn("/Assets/Computer/{id}", package.read("endpoints.json").decode())
             self.assertIn("<redacted>", package.read("computer.sample.json").decode())
 

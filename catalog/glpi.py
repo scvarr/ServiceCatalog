@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
 import requests
 from django.conf import settings
@@ -124,8 +126,8 @@ class GlpiClient:
         except (TypeError, ValueError, KeyError) as exc:
             raise GlpiError("GLPI вернул некорректные данные компьютера.") from exc
 
-    def get_api_schema(self) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-        """Fetch OpenAPI documentation if the installed GLPI exposes it."""
+    def get_api_schema(self) -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, str]]:
+        """Fetch API docs and their OpenAPI document with the current token."""
         token = self._token()
         paths = (
             f"/api.php/{settings.GLPI_API_VERSION}/openapi.json",
@@ -134,10 +136,23 @@ class GlpiClient:
             "/api.php/doc",
         )
         attempts: list[dict[str, Any]] = []
-        for path in paths:
+        documents: dict[str, str] = {}
+        queued = list(paths)
+        visited = set()
+        base = urlparse(settings.GLPI_BASE_URL)
+        while queued:
+            path = queued.pop(0)
+            if path in visited:
+                continue
+            visited.add(path)
             try:
+                url = urljoin(f"{settings.GLPI_BASE_URL}/", path)
+                parsed = urlparse(url)
+                if parsed.netloc != base.netloc or parsed.scheme != base.scheme:
+                    attempts.append({"path": path, "error": "external_document_url_skipped"})
+                    continue
                 response = self.session.get(
-                    f"{settings.GLPI_BASE_URL}{path}",
+                    url,
                     headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
                     timeout=settings.GLPI_TIMEOUT_SECONDS,
                     verify=self.verify,
@@ -146,12 +161,22 @@ class GlpiClient:
                     payload = response.json()
                 except (TypeError, ValueError):
                     payload = None
-                attempts.append({"path": path, "http_status": response.status_code, "openapi_document": isinstance(payload, dict) and "paths" in payload})
-                if response.status_code < 400 and isinstance(payload, dict) and "paths" in payload:
-                    return payload, attempts
+                is_schema = isinstance(payload, dict) and "paths" in payload
+                attempts.append({"path": path, "http_status": response.status_code, "openapi_document": is_schema})
+                if response.status_code < 400 and is_schema:
+                    return payload, attempts, documents
+                content_type = response.headers.get("Content-Type", "")
+                if response.status_code < 400 and "html" in content_type.lower():
+                    html = response.text
+                    documents[path.strip("/").replace("/", "-") or "doc"] = html
+                    for candidate in re.findall(r"(?:url|spec(?:ification)?)[\s:=]+[\"']([^\"']+)", html, flags=re.IGNORECASE):
+                        resolved = urljoin(url, candidate)
+                        candidate_path = urlparse(resolved).path
+                        if candidate_path and candidate_path not in visited and candidate_path not in queued:
+                            queued.append(candidate_path)
             except requests.RequestException as exc:
                 attempts.append({"path": path, "error": type(exc).__name__})
-        return None, attempts
+        return None, attempts, documents
 
 
 _client: GlpiClient | None = None

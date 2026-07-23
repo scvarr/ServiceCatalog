@@ -54,9 +54,9 @@ def build_glpi_diagnostic_archive(reference) -> bytes:
     except GlpiError as exc:
         computer_error = str(exc)
     try:
-        schema, schema_probes = client.get_api_schema()
+        schema, schema_probes, documents = client.get_api_schema()
     except GlpiError as exc:
-        schema, schema_probes = None, [{"error": str(exc)}]
+        schema, schema_probes, documents = None, [{"error": str(exc)}], {}
 
     endpoints = _endpoint_list(schema)
     manifest = {
@@ -79,4 +79,6 @@ def build_glpi_diagnostic_archive(reference) -> bytes:
             package.writestr("computer.sample.json", json.dumps(_redact(payload), ensure_ascii=False, indent=2, default=str))
         if schema is not None:
             package.writestr("openapi.json", json.dumps(schema, ensure_ascii=False, indent=2))
+        for name, document in documents.items():
+            package.writestr(f"documentation/{name}.html", document)
     return archive.getvalue()
