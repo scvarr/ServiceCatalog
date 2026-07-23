@@ -9,6 +9,7 @@ from .listing import (
     DEFAULT_PAGE_SIZE,
     INSTANCE_COLUMNS,
     PAGE_SIZES,
+    SERVICE_MEMBERSHIP_COLUMNS,
     SERVICE_COLUMNS,
     column_specs,
     normalize_columns,
@@ -23,6 +24,7 @@ from .models import ExternalReference, Instance, InstanceType, ListViewPreferenc
 LIST_PARAMETERS = {
     ListViewPreference.PageKey.SERVICE_LIST: ("q", "page", "page_size"),
     ListViewPreference.PageKey.INSTANCE_LIST: ("q", "type", "status", "page", "page_size"),
+    ListViewPreference.PageKey.SERVICE_MEMBERSHIP_LIST: ("q", "page", "page_size"),
 }
 
 
@@ -118,8 +120,33 @@ def service_list(request):
 @login_required
 def service_detail(request, pk):
     service = get_object_or_404(Service, pk=pk)
-    memberships = service.memberships.select_related("instance").filter(status="active")
-    return render(request, "catalog/service_detail.html", {"service": service, "memberships": memberships})
+    page_key = ListViewPreference.PageKey.SERVICE_MEMBERSHIP_LIST
+    post_response = _save_preference(request, page_key, SERVICE_MEMBERSHIP_COLUMNS)
+    if post_response:
+        return post_response
+
+    keys, page_size = _list_state(request, page_key, SERVICE_MEMBERSHIP_COLUMNS)
+    query = request.GET.get("q", "").strip()
+    memberships = service.memberships.select_related("instance__instance_type").filter(status=ServiceMembership.Status.ACTIVE)
+    if query:
+        memberships = memberships.filter(
+            Q(instance__name__icontains=query)
+            | Q(instance__catalog_code__icontains=query)
+            | Q(instance__instance_type__name__icontains=query)
+            | Q(instance__notes__icontains=query)
+            | Q(reason__icontains=query)
+        )
+    context = _list_context(
+        request,
+        memberships.order_by("-included_at", "instance__name"),
+        page_key,
+        SERVICE_MEMBERSHIP_COLUMNS,
+        keys,
+        page_size,
+        list_kind="service_membership",
+        service=service,
+    )
+    return render(request, "catalog/service_detail.html", context)
 
 
 @login_required

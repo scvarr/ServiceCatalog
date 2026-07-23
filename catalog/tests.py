@@ -123,3 +123,20 @@ class CatalogListViewTests(TestCase):
         self.client.logout()
         response = self.client.get(reverse("catalog:service_list"))
         self.assertEqual(response.status_code, 302)
+
+    def test_service_membership_list_has_search_pagination_and_own_columns(self):
+        for number in range(30):
+            instance = Instance.objects.create(name=f"member-{number}", instance_type=self.server_type)
+            ServiceMembership.objects.create(service=self.service, instance=instance)
+        url = reverse("catalog:service_detail", args=[self.service.pk])
+        response = self.client.get(url, {"q": "member", "page_size": 25})
+        self.assertEqual(response.context["page_obj"].paginator.count, 30)
+        self.assertNotContains(response, "<th>Код</th>", html=True)
+        self.assertContains(response, "<th>Тип</th>", html=True)
+        self.assertContains(response, "q=member&amp;page_size=25&amp;page=2")
+        self.client.post(
+            url,
+            {"action": "save_preferences", "visible_columns": ["name", "catalog_code"], "page_size": "50"},
+        )
+        preference = ListViewPreference.objects.get(user=self.user, page_key="service_membership_list")
+        self.assertEqual(preference.visible_columns, ["name", "catalog_code"])

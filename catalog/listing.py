@@ -34,6 +34,14 @@ INSTANCE_COLUMNS = (
     ListColumn("services", "Услуги"),
 )
 
+SERVICE_MEMBERSHIP_COLUMNS = (
+    ListColumn("name", "Экземпляр", required=True, default=True),
+    ListColumn("instance_type", "Тип", default=True),
+    ListColumn("included_at", "Включен", default=True),
+    ListColumn("catalog_code", "Код"),
+    ListColumn("source", "Источник"),
+)
+
 
 def normalize_page_size(value, fallback=DEFAULT_PAGE_SIZE):
     try:

@@ -132,6 +132,7 @@ class ListViewPreference(models.Model):
     class PageKey(models.TextChoices):
         SERVICE_LIST = "service_list", "Список услуг"
         INSTANCE_LIST = "instance_list", "Список экземпляров"
+        SERVICE_MEMBERSHIP_LIST = "service_membership_list", "Состав услуги"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="list_view_preferences", verbose_name="пользователь")
     page_key = models.CharField("страница", max_length=32, choices=PageKey)

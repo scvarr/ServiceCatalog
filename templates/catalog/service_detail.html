@@ -1,2 +1,27 @@
-{% extends "base.html" %}{% block content %}<h1>{{ service.name }}</h1><p>{{ service.description|default:"Описание отсутствует." }}</p><h2>Фактический состав</h2><table><tr><th>Код</th><th>Экземпляр</th><th>Включен</th></tr>{% for m in memberships %}<tr><td><a href="{% url 'catalog:instance_detail' m.instance.pk %}">{{ m.instance.catalog_code }}</a></td><td>{{ m.instance.name }}</td><td>{{ m.included_at }}</td></tr>{% empty %}<tr><td colspan="3">Нет активных экземпляров.</td></tr>{% endfor %}</table>{% endblock %}
-
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ service.name }}</h1>
+<p>{{ service.description|default:"Описание отсутствует." }}</p>
+<h2>Фактический состав</h2>
+{% include "catalog/includes/list_controls.html" %}
+<table>
+  <tr>{% for column in visible_columns %}<th>{{ column.label }}</th>{% endfor %}</tr>
+  {% for membership in page_obj %}
+  <tr>
+    {% for column in visible_columns %}
+    <td>
+      {% if column.key == "name" %}<a href="{% url 'catalog:instance_detail' membership.instance.pk %}">{{ membership.instance.name }}</a>
+      {% elif column.key == "instance_type" %}{{ membership.instance.instance_type }}
+      {% elif column.key == "included_at" %}{{ membership.included_at }}
+      {% elif column.key == "catalog_code" %}{{ membership.instance.catalog_code }}
+      {% elif column.key == "source" %}{{ membership.instance.get_source_display }}
+      {% endif %}
+    </td>
+    {% endfor %}
+  </tr>
+  {% empty %}
+  <tr><td colspan="{{ visible_columns|length }}">В фактическом составе нет экземпляров по заданным условиям.</td></tr>
+  {% endfor %}
+</table>
+{% include "catalog/includes/pagination.html" %}
+{% endblock %}
