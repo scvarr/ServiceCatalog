@@ -89,3 +89,19 @@ def get_glpi_database_client() -> GlpiDatabaseClient:
     if _client is None:
         _client = GlpiDatabaseClient()
     return _client
+
+
+def diagnostic_summary() -> dict[str, Any]:
+    """Return safe connection configuration for the administrator UI.
+
+    Passwords and connection strings are intentionally excluded.
+    """
+    configured = all((settings.GLPI_DB_HOST, settings.GLPI_DB_NAME, settings.GLPI_DB_USER, settings.GLPI_DB_PASSWORD))
+    return {
+        "enabled": settings.GLPI_DB_ENABLED,
+        "configured": configured,
+        "host": settings.GLPI_DB_HOST or "—",
+        "port": settings.GLPI_DB_PORT,
+        "database": settings.GLPI_DB_NAME or "—",
+        "user": settings.GLPI_DB_USER or "—",
+    }

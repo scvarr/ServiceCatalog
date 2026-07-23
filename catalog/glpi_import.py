@@ -124,10 +124,10 @@ def create_glpi_import(reference, user=None):
                     failures.append("processor_db")
                     GlpiImportPayload.objects.create(session=session, endpoint_key="processor_db", error=str(exc)[:500])
                 else:
+                    GlpiImportPayload.objects.create(session=session, endpoint_key="processor_db", payload=database_payload)
                     if database_payload:
                         payloads["processor"] = database_payload
                         payload_sources["processor"] = "processor_db"
-                        GlpiImportPayload.objects.create(session=session, endpoint_key="processor_db", payload=database_payload)
         except GlpiError as exc:
             failures.append(key)
             GlpiImportPayload.objects.create(session=session, endpoint_key=key, http_status=exc.http_status, error=str(exc)[:500])

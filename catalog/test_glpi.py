@@ -5,7 +5,7 @@ from django.contrib.auth.models import Permission, User
 from django.test import TestCase, override_settings
 from catalog.glpi import GlpiClient, GlpiDisabledError, GlpiError, normalize_computer
 from catalog.glpi_import import create_glpi_import, normalize_import_candidates
-from catalog.glpi_database import GlpiDatabaseError
+from catalog.glpi_database import diagnostic_summary
 from catalog.glpi_sync import sync_glpi_reference
 from catalog.glpi_diagnostics import build_glpi_diagnostic_archive
 from catalog.models import ExternalReference, GlpiComputerSnapshot, GlpiImportPayload, GlpiImportSession, Instance, InstanceType
@@ -205,6 +205,14 @@ class GlpiImportTests(TestCase):
         self.assertEqual(candidates["memory_total_gb"][0], "64")
         self.assertIn("PERC H730", candidates["raid_controller"][0])
         self.assertIn("VMware ESXi 8.0", candidates["hypervisor"][0])
+
+    @override_settings(GLPI_DB_ENABLED=True, GLPI_DB_HOST="glpi-db", GLPI_DB_PORT=3306, GLPI_DB_NAME="glpi", GLPI_DB_USER="reader", GLPI_DB_PASSWORD="secret")
+    def test_database_diagnostic_summary_excludes_password(self):
+        summary = diagnostic_summary()
+        self.assertTrue(summary["enabled"])
+        self.assertTrue(summary["configured"])
+        self.assertEqual(summary["host"], "glpi-db")
+        self.assertNotIn("secret", str(summary))
 
     def test_normalizes_processor_rows_from_database_fallback(self):
         candidates = normalize_import_candidates({

@@ -8,6 +8,7 @@ from .glpi import GlpiError
 from .glpi_sync import sync_glpi_reference
 from .glpi_import import apply_glpi_candidates, create_glpi_import
 from .glpi_diagnostics import build_glpi_diagnostic_archive
+from .glpi_database import diagnostic_summary
 from .listing import (
     DEFAULT_PAGE_SIZE,
     GLPI_COMPUTER_COLUMNS,
@@ -245,6 +246,21 @@ def instance_detail(request, pk):
     glpi_reference = instance.external_references.filter(source_system="glpi", external_object_type="Computer").select_related("glpi_computer").first()
     glpi_keys, _ = _list_state(request, page_key, GLPI_COMPUTER_COLUMNS)
     latest_import = instance.glpi_import_sessions.order_by("-created_at").prefetch_related("candidates", "payloads").first()
+    glpi_db_diagnostics = diagnostic_summary()
+    glpi_db_diagnostics["last_result"] = "not_attempted"
+    if latest_import:
+        processor_db_payload = next(
+            (payload for payload in latest_import.payloads.all() if payload.endpoint_key == "processor_db"), None
+        )
+        if processor_db_payload:
+            if processor_db_payload.error:
+                glpi_db_diagnostics["last_result"] = "error"
+                glpi_db_diagnostics["last_error"] = processor_db_payload.error
+            elif processor_db_payload.payload:
+                glpi_db_diagnostics["last_result"] = "rows"
+                glpi_db_diagnostics["row_count"] = len(processor_db_payload.payload)
+            else:
+                glpi_db_diagnostics["last_result"] = "empty"
     return render(
         request,
         "catalog/instance_detail.html",
@@ -257,6 +273,7 @@ def instance_detail(request, pk):
             "visible_glpi_column_keys": glpi_keys,
             "glpi_page_key": page_key,
             "latest_glpi_import": latest_import,
+            "glpi_db_diagnostics": glpi_db_diagnostics,
         },
     )
 
