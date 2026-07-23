@@ -5,7 +5,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Instance, InstanceType, ListViewPreference, Service, ServiceMembership
+from .models import ExternalReference, GlpiComputerSnapshot, Instance, InstanceType, ListViewPreference, Service, ServiceMembership
 
 
 class CatalogModelTests(TestCase):
@@ -140,3 +140,23 @@ class CatalogListViewTests(TestCase):
         )
         preference = ListViewPreference.objects.get(user=self.user, page_key="service_membership_list")
         self.assertEqual(preference.visible_columns, ["name", "catalog_code"])
+
+    def test_glpi_data_is_a_configurable_table(self):
+        reference = ExternalReference.objects.create(
+            instance=self.instance,
+            source_system="glpi",
+            external_object_type="Computer",
+            external_id="2713",
+        )
+        GlpiComputerSnapshot.objects.create(reference=reference, external_name="srv-main", inventory_number="INV-01")
+        url = reverse("catalog:instance_detail", args=[self.instance.pk])
+        response = self.client.get(url)
+        self.assertContains(response, "<th>Имя в GLPI</th>", html=True)
+        self.assertContains(response, "<th>Инвентарный номер</th>", html=True)
+        self.assertNotContains(response, "<th>Серийный номер</th>", html=True)
+        self.client.post(
+            url,
+            {"action": "save_preferences", "visible_columns": ["serial_number", "external_name"], "page_size": "25"},
+        )
+        preference = ListViewPreference.objects.get(user=self.user, page_key="glpi_computer_data")
+        self.assertEqual(preference.visible_columns, ["external_name", "serial_number"])

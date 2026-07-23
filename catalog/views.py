@@ -7,6 +7,7 @@ from .glpi import GlpiError
 from .glpi_sync import sync_glpi_reference
 from .listing import (
     DEFAULT_PAGE_SIZE,
+    GLPI_COMPUTER_COLUMNS,
     INSTANCE_COLUMNS,
     PAGE_SIZES,
     SERVICE_MEMBERSHIP_COLUMNS,
@@ -25,6 +26,7 @@ LIST_PARAMETERS = {
     ListViewPreference.PageKey.SERVICE_LIST: ("q", "page", "page_size"),
     ListViewPreference.PageKey.INSTANCE_LIST: ("q", "type", "status", "page", "page_size"),
     ListViewPreference.PageKey.SERVICE_MEMBERSHIP_LIST: ("q", "page", "page_size"),
+    ListViewPreference.PageKey.GLPI_COMPUTER_DATA: (),
 }
 
 
@@ -204,9 +206,27 @@ def instance_list(request):
 @login_required
 def instance_detail(request, pk):
     instance = get_object_or_404(Instance.objects.select_related("instance_type"), pk=pk)
+    page_key = ListViewPreference.PageKey.GLPI_COMPUTER_DATA
+    post_response = _save_preference(request, page_key, GLPI_COMPUTER_COLUMNS)
+    if post_response:
+        return post_response
+
     memberships = instance.service_memberships.select_related("service").all()
     glpi_reference = instance.external_references.filter(source_system="glpi", external_object_type="Computer").select_related("glpi_computer").first()
-    return render(request, "catalog/instance_detail.html", {"instance": instance, "memberships": memberships, "glpi_reference": glpi_reference})
+    glpi_keys, _ = _list_state(request, page_key, GLPI_COMPUTER_COLUMNS)
+    return render(
+        request,
+        "catalog/instance_detail.html",
+        {
+            "instance": instance,
+            "memberships": memberships,
+            "glpi_reference": glpi_reference,
+            "glpi_columns": GLPI_COMPUTER_COLUMNS,
+            "visible_glpi_columns": column_specs(glpi_keys, GLPI_COMPUTER_COLUMNS),
+            "visible_glpi_column_keys": glpi_keys,
+            "glpi_page_key": page_key,
+        },
+    )
 
 
 @permission_required("catalog.change_instance", raise_exception=True)

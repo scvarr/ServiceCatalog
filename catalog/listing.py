@@ -42,6 +42,27 @@ SERVICE_MEMBERSHIP_COLUMNS = (
     ListColumn("source", "Источник"),
 )
 
+GLPI_COMPUTER_COLUMNS = (
+    ListColumn("external_name", "Имя в GLPI", default=True),
+    ListColumn("inventory_number", "Инвентарный номер", default=True),
+    ListColumn("manufacturer_model", "Производитель / модель", default=True),
+    ListColumn("external_status", "Статус GLPI", default=True),
+    ListColumn("location", "Местоположение", default=True),
+    ListColumn("last_synced_at", "Последняя синхронизация", default=True),
+    ListColumn("serial_number", "Серийный номер"),
+    ListColumn("external_uuid", "UUID"),
+    ListColumn("external_type", "Тип GLPI"),
+    ListColumn("entity_name", "Сущность"),
+    ListColumn("comment", "Комментарий"),
+    ListColumn("inventory_source", "Источник инвентаризации"),
+    ListColumn("external_created_at", "Создан в GLPI"),
+    ListColumn("external_updated_at", "Изменён в GLPI"),
+    ListColumn("last_inventory_update", "Последняя инвентаризация"),
+    ListColumn("last_boot", "Последняя загрузка"),
+    ListColumn("sync_status", "Статус синхронизации"),
+    ListColumn("external_url", "Ссылка"),
+)
+
 
 def normalize_page_size(value, fallback=DEFAULT_PAGE_SIZE):
     try:

@@ -1,1 +1,38 @@
-{% extends "base.html" %}{% block content %}<h1>{{ instance.name }}</h1><dl><dt>Код</dt><dd>{{ instance.catalog_code }}</dd><dt>Тип</dt><dd>{{ instance.instance_type }}</dd><dt>Состояние</dt><dd>{{ instance.get_status_display }}</dd><dt>Источник</dt><dd>{{ instance.get_source_display }}</dd></dl><h2>Данные GLPI</h2>{% if glpi_reference %}{% if perms.catalog.change_instance %}<form method="post" action="{% url 'catalog:sync_glpi_instance' instance.pk %}">{% csrf_token %}<button>Обновить данные из GLPI</button></form>{% endif %}{% with data=glpi_reference.glpi_computer %}<dl><dt>Имя в GLPI</dt><dd>{{ data.external_name|default:"—" }}</dd><dt>Инвентарный номер</dt><dd>{{ data.inventory_number|default:"—" }}</dd><dt>Серийный номер</dt><dd>{{ data.serial_number|default:"—" }}</dd><dt>Производитель / модель</dt><dd>{{ data.manufacturer|default:"—" }} / {{ data.model|default:"—" }}</dd><dt>Статус / тип</dt><dd>{{ data.external_status|default:"—" }} / {{ data.external_type|default:"—" }}</dd><dt>Местоположение / сущность</dt><dd>{{ data.location|default:"—" }} / {{ data.entity_name|default:"—" }}</dd><dt>Комментарий</dt><dd>{{ data.comment|default:"—" }}</dd><dt>Последняя инвентаризация</dt><dd>{{ data.last_inventory_update|default:"—" }}</dd><dt>Изменен в GLPI</dt><dd>{{ data.external_updated_at|default:"—" }}</dd><dt>Последняя синхронизация</dt><dd>{{ glpi_reference.last_synced_at|default:"—" }} ({{ glpi_reference.get_last_sync_status_display }})</dd><dt>Ссылка</dt><dd>{% if glpi_reference.external_url %}<a href="{{ glpi_reference.external_url }}" target="_blank" rel="noopener">Открыть в GLPI</a>{% else %}—{% endif %}</dd></dl>{% endwith %}{% else %}<p>Внешняя ссылка GLPI Computer не задана.</p>{% endif %}<h2>Услуги</h2><ul>{% for m in memberships %}<li><a href="{% url 'catalog:service_detail' m.service.pk %}">{{ m.service }}</a>: {{ m.included_at }} — {{ m.excluded_at|default:"по настоящее время" }}</li>{% empty %}<li>Нет связей.</li>{% endfor %}</ul>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ instance.name }}</h1>
+<table class="details-table"><tr><th>Код</th><th>Тип</th><th>Состояние</th><th>Источник</th></tr><tr><td>{{ instance.catalog_code }}</td><td>{{ instance.instance_type }}</td><td>{{ instance.get_status_display }}</td><td>{{ instance.get_source_display }}</td></tr></table>
+
+<h2>Данные GLPI</h2>
+{% if glpi_reference %}
+  {% if perms.catalog.change_instance %}<form method="post" action="{% url 'catalog:sync_glpi_instance' instance.pk %}">{% csrf_token %}<button>Обновить данные из GLPI</button></form>{% endif %}
+  {% include "catalog/includes/glpi_columns_controls.html" %}
+  {% with data=glpi_reference.glpi_computer %}
+  <div class="table-wrap"><table><tr>{% for column in visible_glpi_columns %}<th>{{ column.label }}</th>{% endfor %}</tr><tr>
+    {% for column in visible_glpi_columns %}<td>
+      {% if column.key == "external_name" %}{{ data.external_name|default:"—" }}
+      {% elif column.key == "inventory_number" %}{{ data.inventory_number|default:"—" }}
+      {% elif column.key == "manufacturer_model" %}{{ data.manufacturer|default:"—" }} / {{ data.model|default:"—" }}
+      {% elif column.key == "external_status" %}{{ data.external_status|default:"—" }}
+      {% elif column.key == "location" %}{{ data.location|default:"—" }}
+      {% elif column.key == "last_synced_at" %}{{ glpi_reference.last_synced_at|default:"—" }}
+      {% elif column.key == "serial_number" %}{{ data.serial_number|default:"—" }}
+      {% elif column.key == "external_uuid" %}{{ data.external_uuid|default:"—" }}
+      {% elif column.key == "external_type" %}{{ data.external_type|default:"—" }}
+      {% elif column.key == "entity_name" %}{{ data.entity_name|default:"—" }}
+      {% elif column.key == "comment" %}{{ data.comment|default:"—" }}
+      {% elif column.key == "inventory_source" %}{{ data.inventory_source|default:"—" }}
+      {% elif column.key == "external_created_at" %}{{ data.external_created_at|default:"—" }}
+      {% elif column.key == "external_updated_at" %}{{ data.external_updated_at|default:"—" }}
+      {% elif column.key == "last_inventory_update" %}{{ data.last_inventory_update|default:"—" }}
+      {% elif column.key == "last_boot" %}{{ data.last_boot|default:"—" }}
+      {% elif column.key == "sync_status" %}{{ glpi_reference.get_last_sync_status_display }}
+      {% elif column.key == "external_url" %}{% if glpi_reference.external_url %}<a href="{{ glpi_reference.external_url }}" target="_blank" rel="noopener">Открыть в GLPI</a>{% else %}—{% endif %}
+      {% endif %}
+    </td>{% endfor %}
+  </tr></table></div>
+  {% endwith %}
+{% else %}<p>Внешняя ссылка GLPI Computer не задана.</p>{% endif %}
+
+<h2>Услуги</h2><ul>{% for m in memberships %}<li><a href="{% url 'catalog:service_detail' m.service.pk %}">{{ m.service }}</a>: {{ m.included_at }} — {{ m.excluded_at|default:"по настоящее время" }}</li>{% empty %}<li>Нет связей.</li>{% endfor %}</ul>
+{% endblock %}
