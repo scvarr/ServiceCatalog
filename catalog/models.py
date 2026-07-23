@@ -14,7 +14,6 @@ class TimeStampedModel(models.Model):
 
 
 class InstanceType(TimeStampedModel):
-    code = models.CharField("код", max_length=64, unique=True)
     name = models.CharField("наименование", max_length=255)
     is_active = models.BooleanField("активен", default=True)
 
@@ -22,10 +21,10 @@ class InstanceType(TimeStampedModel):
         verbose_name = "тип экземпляра"
         verbose_name_plural = "типы экземпляров"
         ordering = ["name"]
-        indexes = [models.Index(fields=["is_active", "code"])]
+        indexes = [models.Index(fields=["is_active", "name"], name="catalog_type_active_name_idx")]
 
     def __str__(self):
-        return f"{self.code} — {self.name}"
+        return self.name
 
 
 class Instance(TimeStampedModel):
@@ -37,7 +36,7 @@ class Instance(TimeStampedModel):
     class Source(models.TextChoices):
         MANUAL = "manual", "Вручную"
 
-    catalog_code = models.CharField("каталожный код", max_length=128, unique=True)
+    catalog_code = models.CharField("системный код", max_length=128, unique=True, null=True, blank=True, editable=False)
     name = models.CharField("наименование", max_length=255)
     instance_type = models.ForeignKey(InstanceType, on_delete=models.PROTECT, related_name="instances", verbose_name="тип")
     status = models.CharField("состояние", max_length=16, choices=Status, default=Status.ACTIVE)
@@ -51,7 +50,14 @@ class Instance(TimeStampedModel):
         indexes = [models.Index(fields=["instance_type", "status"])]
 
     def __str__(self):
-        return f"{self.catalog_code} — {self.name}"
+        return f"{self.catalog_code or self.pk} — {self.name}"
+
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new and not self.catalog_code:
+            self.catalog_code = f"INS-{self.pk:06d}"
+            type(self).objects.filter(pk=self.pk).update(catalog_code=self.catalog_code)
 
 
 class Service(TimeStampedModel):
@@ -61,7 +67,7 @@ class Service(TimeStampedModel):
         MIXED = "mixed", "Смешанный"
         NONE = "none", "Без контроля"
 
-    code = models.CharField("код", max_length=64, unique=True)
+    code = models.CharField("системный код", max_length=64, unique=True, null=True, blank=True, editable=False)
     name = models.CharField("наименование", max_length=255)
     description = models.TextField("описание", blank=True)
     is_active = models.BooleanField("активна", default=True)
@@ -71,10 +77,17 @@ class Service(TimeStampedModel):
         verbose_name = "услуга"
         verbose_name_plural = "услуги"
         ordering = ["code"]
-        indexes = [models.Index(fields=["is_active", "code"])]
+        indexes = [models.Index(fields=["is_active", "name"], name="catalog_svc_active_name_idx")]
 
     def __str__(self):
-        return f"{self.code} — {self.name}"
+        return self.name
+
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"SVC-{self.pk:06d}"
+            type(self).objects.filter(pk=self.pk).update(code=self.code)
 
 
 class ServiceMembership(TimeStampedModel):
@@ -113,4 +126,3 @@ class ServiceMembership(TimeStampedModel):
     @property
     def is_current(self):
         return self.status == self.Status.ACTIVE and self.included_at <= timezone.localdate()
-

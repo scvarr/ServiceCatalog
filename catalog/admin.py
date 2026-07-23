@@ -4,9 +4,9 @@ from .models import Instance, InstanceType, Service, ServiceMembership
 
 @admin.register(InstanceType)
 class InstanceTypeAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "is_active", "updated_at")
+    list_display = ("name", "is_active", "updated_at")
     list_filter = ("is_active",)
-    search_fields = ("code", "name")
+    search_fields = ("name",)
 
 
 @admin.register(Instance)
@@ -21,6 +21,7 @@ class ServiceAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "default_accounting_mode", "is_active", "updated_at")
     list_filter = ("is_active", "default_accounting_mode")
     search_fields = ("code", "name")
+    readonly_fields = ("code",)
 
 
 @admin.register(ServiceMembership)
@@ -28,4 +29,3 @@ class ServiceMembershipAdmin(admin.ModelAdmin):
     list_display = ("service", "instance", "included_at", "excluded_at", "status")
     list_filter = ("status", "service")
     search_fields = ("service__code", "instance__catalog_code", "instance__name")
-

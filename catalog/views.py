@@ -6,7 +6,7 @@ from .models import Instance, InstanceType, Service
 
 @login_required
 def service_list(request):
-    services = Service.objects.annotate(member_count=Count("memberships")).order_by("code")
+    services = Service.objects.annotate(member_count=Count("memberships")).order_by("name")
     return render(request, "catalog/service_list.html", {"services": services})
 
 

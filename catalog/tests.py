@@ -7,13 +7,13 @@ from .models import Instance, InstanceType, Service, ServiceMembership
 
 class CatalogModelTests(TestCase):
     def setUp(self):
-        self.instance_type = InstanceType.objects.create(code="server", name="Сервер")
-        self.instance = Instance.objects.create(catalog_code="SRV-001", name="srv-001", instance_type=self.instance_type)
-        self.service = Service.objects.create(code="infra", name="Инфраструктура")
+        self.instance_type = InstanceType.objects.create(name="Сервер")
+        self.instance = Instance.objects.create(name="srv-001", instance_type=self.instance_type)
+        self.service = Service.objects.create(name="Инфраструктура")
 
-    def test_catalog_code_is_unique(self):
-        with self.assertRaises(IntegrityError):
-            Instance.objects.create(catalog_code="SRV-001", name="duplicate", instance_type=self.instance_type)
+    def test_system_codes_are_generated(self):
+        self.assertEqual(self.instance.catalog_code, f"INS-{self.instance.pk:06d}")
+        self.assertEqual(self.service.code, f"SVC-{self.service.pk:06d}")
 
     def test_only_one_active_membership_per_pair(self):
         ServiceMembership.objects.create(service=self.service, instance=self.instance, included_at=date(2026, 1, 1))
@@ -24,4 +24,3 @@ class CatalogModelTests(TestCase):
         membership = ServiceMembership(service=self.service, instance=self.instance, status="excluded")
         with self.assertRaises(ValidationError):
             membership.clean()
-

@@ -29,6 +29,10 @@ docker compose exec web python manage.py makemigrations --check --dry-run
 docker compose exec web python manage.py test
 ```
 
+## Идентификаторы каталога
+
+Тип экземпляра создаётся только по наименованию. Системные коды услуг (`SVC-000001`) и экземпляров (`INS-000001`) формируются автоматически после первого сохранения; код экземпляра используется как стабильный ключ CSV-импорта.
+
 ## Развёртывание
 
 После `git pull` подготовьте production `.env`, затем выполните `docker compose up --build -d`. PostgreSQL хранит данные в именованном volume `postgres_data`; обычный перезапуск контейнеров не удаляет их.
@@ -40,4 +44,3 @@ Compose создаёт именованную сеть `servicecatalog_net` (`17
 Для Nginx Proxy Manager на том же Docker-хосте подключите его контейнер к сети `servicecatalog_net` и укажите upstream `http://172.30.0.10:8000`. Внешний порт `8380` можно использовать для локальной диагностики; GUI на сервере для работы приложения не нужен.
 
 Статические файлы, включая стили Django Admin, раздаёт WhiteNoise внутри контейнера `web`; отдельный reverse proxy для них не требуется.
-# ServiceCatalog
