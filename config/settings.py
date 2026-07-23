@@ -46,7 +46,7 @@ DATABASES = {"default": {
     "NAME": os.environ.get("POSTGRES_DB", "servicecatalog"),
     "USER": os.environ.get("POSTGRES_USER", "servicecatalog"),
     "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "servicecatalog"),
-    "HOST": os.environ.get("POSTGRES_HOST", "db"),
+    "HOST": os.environ.get("POSTGRES_HOST", "172.30.0.11"),
     "PORT": os.environ.get("POSTGRES_PORT", "5432"),
 }}
 
@@ -66,4 +66,3 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "catalog:service_list"
 LOGOUT_REDIRECT_URL = "login"
-

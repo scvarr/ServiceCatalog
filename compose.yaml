@@ -6,7 +6,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       servicecatalog_net:
-        ipv4_address: 172.30.0.11
+        ipv4_address: ${DB_CONTAINER_IP:-172.30.0.11}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -17,6 +17,8 @@ services:
   web:
     build: .
     env_file: .env
+    environment:
+      POSTGRES_HOST: ${DB_CONTAINER_IP:-172.30.0.11}
     ports:
       - "${HOST_PORT:-8380}:8000"
     depends_on:
@@ -30,7 +32,7 @@ services:
       start_period: 15s
     networks:
       servicecatalog_net:
-        ipv4_address: 172.30.0.10
+        ipv4_address: ${WEB_CONTAINER_IP:-172.30.0.10}
 
 volumes:
   postgres_data:

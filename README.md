@@ -31,7 +31,9 @@ docker compose exec web python manage.py test
 
 После `git pull` подготовьте production `.env`, затем выполните `docker compose up --build -d`. PostgreSQL хранит данные в именованном volume `postgres_data`; обычный перезапуск контейнеров не удаляет их.
 
-Compose создаёт именованную сеть `servicecatalog_net` (`172.30.0.0/24`): приложение получает адрес `172.30.0.10`, PostgreSQL — `172.30.0.11`. Внешний порт задаётся `HOST_PORT` и по умолчанию равен `8380`.
+Compose создаёт именованную сеть `servicecatalog_net` (`172.30.0.0/24`): приложение получает адрес `WEB_CONTAINER_IP` (по умолчанию `172.30.0.10`), PostgreSQL — `DB_CONTAINER_IP` (по умолчанию `172.30.0.11`). Внешний порт задаётся `HOST_PORT` и по умолчанию равен `8380`.
+
+Внутренний Docker DNS не требуется: `web` подключается к PostgreSQL по `DB_CONTAINER_IP`. При изменении подсети укажите в `.env` согласованные значения `DB_CONTAINER_IP`, `WEB_CONTAINER_IP` и `POSTGRES_HOST` (последнее оставьте равным `DB_CONTAINER_IP`).
 
 Для Nginx Proxy Manager на том же Docker-хосте подключите его контейнер к сети `servicecatalog_net` и укажите upstream `http://172.30.0.10:8000`. Внешний порт `8380` можно использовать для локальной диагностики; GUI на сервере для работы приложения не нужен.
 # ServiceCatalog
