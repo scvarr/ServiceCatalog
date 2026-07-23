@@ -17,6 +17,13 @@ def populate_legacy_categories(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # The data migration updates rows with new foreign keys.  PostgreSQL keeps
+    # their constraint triggers pending until the transaction commits, while
+    # the final UniqueConstraint is implemented as an index.  Running the
+    # migration non-atomically gives the data changes a chance to commit before
+    # that index is created.
+    atomic = False
+
     dependencies = [("catalog", "0007_operational_metrics_profiles_glpi_import"), ("contracts", "0002_contract_actual_snapshots")]
     operations = [
         migrations.RemoveConstraint(model_name="contractserviceterm", name="unique_contract_service_term"),
