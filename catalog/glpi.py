@@ -151,8 +151,11 @@ class GlpiClient:
     def get_computer_payload(self, computer_id: int | str) -> dict[str, Any]:
         return self._get_json(f"/Assets/Computer/{computer_id}", "компьютера", dict)
 
-    def list_computers(self, *, start: int = 0, limit: int = 100) -> list[dict[str, Any]]:
-        return self._get_json("/Assets/Computer", "списка компьютеров", list, params={"start": start, "limit": limit})
+    def list_computers(self, *, start: int = 0, limit: int = 100, filter: str = "") -> list[dict[str, Any]]:
+        params = {"start": start, "limit": limit}
+        if filter:
+            params["filter"] = filter
+        return self._get_json("/Assets/Computer", "списка компьютеров", list, params=params)
 
     def list_dropdown(self, resource: str, *, start: int = 0, limit: int = 100) -> list[dict[str, Any]]:
         return self._get_json(f"/Dropdowns/{resource}", f"справочника {resource}", list, params={"start": start, "limit": limit})

@@ -121,7 +121,7 @@ def _upsert_lookups(run, values: dict[str, list[dict[str, Any]]]) -> dict[tuple[
     return {(item.kind, item.external_id): item.pk for item in GlpiCachedLookup.objects.all()}
 
 
-def _persist_cache(run, computers: list[dict[str, Any]], lookups: dict[str, list[dict[str, Any]]], component_data, component_errors) -> dict[str, int]:
+def _persist_cache(run, computers: list[dict[str, Any]], lookups: dict[str, list[dict[str, Any]]], component_data, component_errors, *, mark_missing=False) -> dict[str, int]:
     now = timezone.now()
     with transaction.atomic():
         lookup_ids = _upsert_lookups(run, lookups)
@@ -149,7 +149,8 @@ def _persist_cache(run, computers: list[dict[str, Any]], lookups: dict[str, list
         if create: GlpiCachedComputer.objects.bulk_create(create, batch_size=500)
         computer_fields = ["name", "comment", "serial_number", "inventory_number", "external_uuid", "computer_type", "state", "location", "manufacturer", "model", "auto_update_system", "external_created_at", "external_updated_at", "last_inventory_update", "last_boot", "raw_payload", "last_seen_run", "last_successful_sync_at", "is_missing", "last_error", "updated_at"]
         if update: GlpiCachedComputer.objects.bulk_update(update, computer_fields, batch_size=500)
-        GlpiCachedComputer.objects.exclude(last_seen_run=run).update(is_missing=True)
+        if mark_missing:
+            GlpiCachedComputer.objects.exclude(last_seen_run=run).update(is_missing=True)
 
         cached = {item.external_id: item for item in GlpiCachedComputer.objects.all()}
         existing_components = {(item.computer_id, item.component_key): item for item in GlpiCachedComponent.objects.all()}
@@ -176,62 +177,80 @@ def _persist_cache(run, computers: list[dict[str, Any]], lookups: dict[str, list
     return {"cache_computers_created": len(create), "cache_computers_updated": len(update), "cache_computers_missing": GlpiCachedComputer.objects.filter(is_missing=True).count()}
 
 
-def sync_glpi_cache(*, requested_by=None, trigger=GlpiCacheSyncRun.Trigger.MANUAL, page_size: int | None = None, component_workers: int | None = None, refresh_linked: bool = True) -> GlpiCacheSyncRun:
+def refresh_glpi_lookups(*, requested_by=None, page_size: int | None = None) -> GlpiCacheSyncRun:
+    """Refresh only small dynamic GLPI dropdowns, without loading assets."""
+    run = GlpiCacheSyncRun.objects.create(trigger=GlpiCacheSyncRun.Trigger.MANUAL, requested_by=requested_by, started_at=timezone.now())
+    client, page_size, lookups, errors = get_glpi_client(), page_size or settings.GLPI_API_PAGE_SIZE, {}, []
+    for kind, resource in LOOKUPS:
+        try:
+            lookups[kind] = _pages(lambda **kwargs: client.list_dropdown(resource, **kwargs), page_size)
+        except GlpiError as exc:
+            errors.append(f"{resource}: {exc}")
+    with transaction.atomic():
+        _upsert_lookups(run, lookups)
+    run.status = GlpiCacheSyncRun.Status.PARTIAL if errors else GlpiCacheSyncRun.Status.COMPLETED
+    run.finished_at, run.statistics, run.error_summary = timezone.now(), {"lookups_received": sum(len(value) for value in lookups.values())}, "\n".join(errors)[:2000]
+    run.save(update_fields=["status", "finished_at", "statistics", "error_summary", "updated_at"])
+    return run
+
+
+def sync_glpi_cache(*, requested_by=None, trigger=GlpiCacheSyncRun.Trigger.MANUAL, page_size: int | None = None, component_workers: int | None = None, refresh_linked: bool = True, rsql_filter: str = "") -> GlpiCacheSyncRun:
     run = GlpiCacheSyncRun.objects.create(trigger=trigger, requested_by=requested_by, started_at=timezone.now())
     page_size = page_size or settings.GLPI_API_PAGE_SIZE
     workers = component_workers or settings.GLPI_COMPONENT_WORKERS
     client = get_glpi_client()
     stats: dict[str, Any] = defaultdict(int)
     errors: list[str] = []
-    try:
-        computers = _pages(client.list_computers, page_size)
-    except GlpiError as exc:
-        run.status, run.finished_at, run.error_summary = GlpiCacheSyncRun.Status.FAILED, timezone.now(), str(exc)[:2000]
-        run.statistics = {"computers_received": 0}
-        run.save(update_fields=["status", "finished_at", "error_summary", "statistics", "updated_at"])
-        return run
-    run.full_computer_list_received = True
-    stats["computers_received"] = len(computers)
     lookups = {}
     for kind, resource in LOOKUPS:
         try: lookups[kind] = _pages(lambda **kwargs: client.list_dropdown(resource, **kwargs), page_size)
         except GlpiError as exc:
             errors.append(f"{resource}: {exc}")
 
-    component_data, component_errors, api_empty_processors = defaultdict(dict), defaultdict(dict), []
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = [pool.submit(_component_payloads, str(payload["id"])) for payload in computers]
-        for future in as_completed(futures):
-            external_id, payloads, item_errors = future.result()
-            if item_errors:
-                component_errors[external_id].update(item_errors)
-            for key, payload in payloads.items():
-                component_data[external_id][key] = {"payload": payload, "source": GlpiCachedComponent.Source.API}
-                if key == "processor" and not payload: api_empty_processors.append(external_id)
-    if api_empty_processors:
-        try:
-            db_rows = get_glpi_database_client().get_computer_processors_many(api_empty_processors)
-        except GlpiDatabaseDisabled:
-            db_rows = {}
-        except GlpiDatabaseError as exc:
-            for external_id in api_empty_processors:
-                # A failed fallback is not a valid empty component list: retain
-                # the last successful processor payload in the local cache.
-                component_data[external_id].pop("processor", None)
-                component_errors[external_id]["processor_db"] = str(exc)
-        else:
-            for external_id, rows in db_rows.items():
-                if rows:
-                    component_data[external_id]["processor"] = {"payload": rows, "source": GlpiCachedComponent.Source.DATABASE}
-                    stats["processor_db_fallbacks"] += 1
-    stats["component_errors"] = sum(len(value) for value in component_errors.values())
+    start = 0
     try:
-        stats.update(_persist_cache(run, computers, lookups, component_data, component_errors))
+        while True:
+            computers = client.list_computers(start=start, limit=page_size, filter=rsql_filter)
+            stats["computers_received"] += len(computers)
+            component_data, component_errors, api_empty_processors = defaultdict(dict), defaultdict(dict), []
+            with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+                futures = [pool.submit(_component_payloads, str(payload["id"])) for payload in computers]
+                for future in as_completed(futures):
+                    external_id, payloads, item_errors = future.result()
+                    if item_errors: component_errors[external_id].update(item_errors)
+                    for key, payload in payloads.items():
+                        component_data[external_id][key] = {"payload": payload, "source": GlpiCachedComponent.Source.API}
+                        if key == "processor" and not payload: api_empty_processors.append(external_id)
+            if api_empty_processors:
+                try: db_rows = get_glpi_database_client().get_computer_processors_many(api_empty_processors)
+                except GlpiDatabaseDisabled: db_rows = {}
+                except GlpiDatabaseError as exc:
+                    for external_id in api_empty_processors:
+                        component_data[external_id].pop("processor", None)
+                        component_errors[external_id]["processor_db"] = str(exc)
+                else:
+                    for external_id, rows in db_rows.items():
+                        if rows:
+                            component_data[external_id]["processor"] = {"payload": rows, "source": GlpiCachedComponent.Source.DATABASE}
+                            stats["processor_db_fallbacks"] += 1
+            stats["component_errors"] += sum(len(value) for value in component_errors.values())
+            page_stats = _persist_cache(run, computers, lookups, component_data, component_errors)
+            stats["cache_computers_created"] += page_stats["cache_computers_created"]
+            stats["cache_computers_updated"] += page_stats["cache_computers_updated"]
+            if len(computers) < page_size:
+                run.full_computer_list_received = True
+                if not rsql_filter:
+                    GlpiCachedComputer.objects.exclude(last_seen_run=run).update(is_missing=True)
+                stats["cache_computers_missing"] = GlpiCachedComputer.objects.filter(is_missing=True).count()
+                break
+            start += page_size
         if refresh_linked:
             from .glpi_sync import refresh_linked_instances_from_cache
             stats.update(refresh_linked_instances_from_cache(run))
-        run.status = GlpiCacheSyncRun.Status.PARTIAL if errors or component_errors else GlpiCacheSyncRun.Status.COMPLETED
-        run.error_summary = "\n".join((errors + [f"components: {stats['component_errors']}"] if component_errors else errors))[:2000]
+        run.status = GlpiCacheSyncRun.Status.PARTIAL if errors or stats["component_errors"] else GlpiCacheSyncRun.Status.COMPLETED
+        run.error_summary = "\n".join((errors + [f"components: {stats['component_errors']}"] if stats["component_errors"] else errors))[:2000]
+    except GlpiError as exc:
+        run.status, run.error_summary = GlpiCacheSyncRun.Status.FAILED, str(exc)[:2000]
     except Exception as exc:
         run.status, run.error_summary = GlpiCacheSyncRun.Status.FAILED, f"Ошибка сохранения кэша: {type(exc).__name__}."
     run.finished_at, run.statistics = timezone.now(), dict(stats)

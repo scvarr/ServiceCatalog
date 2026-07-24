@@ -13,5 +13,6 @@ urlpatterns = [
     path("instances/<int:pk>/glpi-imports/<int:session_pk>/apply/", views.apply_glpi_import, name="apply_glpi_import"),
     path("glpi/cache/", views.glpi_cache_list, name="glpi_cache_list"),
     path("glpi/cache/sync/", views.sync_glpi_cache_view, name="sync_glpi_cache"),
+    path("glpi/cache/lookups/", views.refresh_glpi_cache_lookups_view, name="refresh_glpi_cache_lookups"),
     path("glpi/cache/import/", views.import_glpi_cached_computers, name="import_glpi_cached_computers"),
 ]

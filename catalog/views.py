@@ -9,8 +9,8 @@ from .glpi_sync import sync_glpi_reference
 from .glpi_import import apply_glpi_candidates, create_glpi_import
 from .glpi_diagnostics import build_glpi_diagnostic_archive
 from .glpi_database import diagnostic_summary
-from .glpi_cache import create_instances_from_glpi_cache, sync_glpi_cache
-from .forms import GlpiCachedComputerImportForm, GlpiCacheFilterForm
+from .glpi_cache import create_instances_from_glpi_cache, refresh_glpi_lookups, sync_glpi_cache
+from .forms import GlpiCachedComputerImportForm, GlpiCacheFilterForm, GlpiCacheSyncFilterForm
 from .listing import (
     DEFAULT_PAGE_SIZE,
     GLPI_COMPUTER_COLUMNS,
@@ -361,19 +361,32 @@ def glpi_cache_list(request):
     page_obj, page_range = paginate(computers, request.GET.get("page"), normalize_page_size(request.GET.get("page_size"), DEFAULT_PAGE_SIZE))
     selected = request.GET.getlist("selected")
     latest_run = GlpiCacheSyncRun.objects.first()
-    return render(request, "catalog/glpi_cache_list.html", {"filter_form": filters, "page_obj": page_obj, "page_range": page_range, "latest_run": latest_run, "selected": selected, "import_form": GlpiCachedComputerImportForm(choices=[row.pk for row in page_obj if not row.is_linked]), "page_query": query_string(request.GET, ("computer_type", "state", "q", "show_missing", "page_size"), exclude=("page",))})
+    return render(request, "catalog/glpi_cache_list.html", {"filter_form": filters, "sync_filter_form": GlpiCacheSyncFilterForm(), "page_obj": page_obj, "page_range": page_range, "latest_run": latest_run, "selected": selected, "import_form": GlpiCachedComputerImportForm(choices=[row.pk for row in page_obj if not row.is_linked]), "page_query": query_string(request.GET, ("computer_type", "state", "q", "show_missing", "page_size"), exclude=("page",))})
 
 
 @permission_required("catalog.change_glpicachedcomputer", raise_exception=True)
 def sync_glpi_cache_view(request):
     if request.method == "POST":
-        run = sync_glpi_cache(requested_by=request.user)
+        filters = GlpiCacheSyncFilterForm(request.POST)
+        rsql_filter = filters.rsql_filter() if filters.is_valid() else ""
+        run = sync_glpi_cache(requested_by=request.user, rsql_filter=rsql_filter)
         if run.status == GlpiCacheSyncRun.Status.COMPLETED:
             messages.success(request, "Кэш GLPI обновлён.")
         elif run.status == GlpiCacheSyncRun.Status.PARTIAL:
             messages.warning(request, "Кэш GLPI обновлён частично.")
         else:
             messages.error(request, "Не удалось обновить кэш GLPI.")
+    return redirect("catalog:glpi_cache_list")
+
+
+@permission_required("catalog.change_glpicachedcomputer", raise_exception=True)
+def refresh_glpi_cache_lookups_view(request):
+    if request.method == "POST":
+        run = refresh_glpi_lookups(requested_by=request.user)
+        if run.status == GlpiCacheSyncRun.Status.COMPLETED:
+            messages.success(request, "Справочники GLPI обновлены.")
+        else:
+            messages.warning(request, "Справочники GLPI обновлены частично.")
     return redirect("catalog:glpi_cache_list")
 
 

@@ -1,0 +1,7 @@
+{% extends "admin/index.html" %}
+{% block content %}
+{% if perms.catalog.view_glpicachedcomputer %}
+<div class="module" style="margin-bottom:20px"><table><caption><a href="{% url 'admin_glpi_cache' %}">Интеграция GLPI</a></caption><tbody><tr><th scope="row"><a href="{% url 'admin_glpi_cache' %}">Кэш GLPI и массовая загрузка компьютеров</a></th><td>Выбор фильтров GLPI, синхронизация и импорт экземпляров.</td></tr></tbody></table></div>
+{% endif %}
+{{ block.super }}
+{% endblock %}
