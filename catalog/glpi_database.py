@@ -8,7 +8,8 @@ case.  It never writes to GLPI and does not use Django's database connection.
 
 from __future__ import annotations
 
-from typing import Any
+from collections import defaultdict
+from typing import Any, Iterable
 
 from django.conf import settings
 
@@ -28,7 +29,7 @@ class GlpiDatabaseClient:
         if not all((settings.GLPI_DB_HOST, settings.GLPI_DB_NAME, settings.GLPI_DB_USER, settings.GLPI_DB_PASSWORD)):
             raise GlpiDatabaseError("Конфигурация прямого чтения базы GLPI неполная.")
 
-    def get_computer_processors(self, computer_id: int | str) -> list[dict[str, Any]]:
+    def get_computer_processors_many(self, computer_ids: Iterable[int | str]) -> dict[str, list[dict[str, Any]]]:
         """Return active processor component rows for one GLPI Computer.
 
         The query is intentionally fixed and parameterized: the external ID
@@ -41,6 +42,10 @@ class GlpiDatabaseClient:
         except ImportError as exc:  # pragma: no cover - image dependency guard
             raise GlpiDatabaseError("В образе приложения отсутствует клиент MySQL.") from exc
 
+        ids = [str(value) for value in dict.fromkeys(computer_ids) if str(value).isdigit()]
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        if not ids:
+            return grouped
         query = """
             SELECT
                 link.id AS component_link_id,
@@ -54,7 +59,7 @@ class GlpiDatabaseClient:
             JOIN glpi_deviceprocessors AS processor
               ON processor.id = link.deviceprocessors_id
             WHERE link.itemtype = 'Computer'
-              AND link.items_id = %s
+              AND link.items_id IN ({placeholders})
               AND link.is_deleted = 0
             ORDER BY link.id
         """
@@ -73,12 +78,20 @@ class GlpiDatabaseClient:
             )
             try:
                 with connection.cursor() as cursor:
-                    cursor.execute(query, (computer_id,))
-                    return list(cursor.fetchall())
+                    batch_size = max(1, settings.GLPI_DB_BATCH_SIZE)
+                    for start in range(0, len(ids), batch_size):
+                        batch = ids[start:start + batch_size]
+                        cursor.execute(query.format(placeholders=", ".join(["%s"] * len(batch))), batch)
+                        for row in cursor.fetchall():
+                            grouped[str(row["computer_id"])].append(row)
+                    return dict(grouped)
             finally:
                 connection.close()
         except pymysql.MySQLError as exc:
             raise GlpiDatabaseError(f"Не удалось прочитать компоненты из базы GLPI: {type(exc).__name__}.") from exc
+
+    def get_computer_processors(self, computer_id: int | str) -> list[dict[str, Any]]:
+        return self.get_computer_processors_many([computer_id]).get(str(computer_id), [])
 
 
 _client: GlpiDatabaseClient | None = None

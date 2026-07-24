@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ActualServiceMetric, ExternalReference, GlpiComputerSnapshot, GlpiImportCandidate, GlpiImportPayload, GlpiImportSession, Instance, InstanceType, ListViewPreference, ServerProfile, Service, ServiceMembership, ServiceMetricCategory, UnitOfMeasure
+from .models import ActualServiceMetric, ExternalReference, GlpiCacheSyncRun, GlpiCachedComponent, GlpiCachedComputer, GlpiCachedLookup, GlpiComputerSnapshot, GlpiImportCandidate, GlpiImportPayload, GlpiImportSession, Instance, InstanceType, ListViewPreference, ServerProfile, Service, ServiceMembership, ServiceMetricCategory, UnitOfMeasure
 
 
 @admin.register(InstanceType)
@@ -54,7 +54,14 @@ class GlpiComputerSnapshotAdmin(admin.ModelAdmin):
     readonly_fields = tuple(field.name for field in GlpiComputerSnapshot._meta.fields)
 
 
-admin.site.register((UnitOfMeasure, ServiceMetricCategory, ActualServiceMetric, ServerProfile, GlpiImportSession, GlpiImportPayload, GlpiImportCandidate))
+admin.site.register((UnitOfMeasure, ServiceMetricCategory, ActualServiceMetric, ServerProfile, GlpiImportSession, GlpiImportPayload, GlpiImportCandidate, GlpiCacheSyncRun, GlpiCachedLookup, GlpiCachedComponent))
+
+
+@admin.register(GlpiCachedComputer)
+class GlpiCachedComputerAdmin(admin.ModelAdmin):
+    list_display = ("external_id", "name", "computer_type", "state", "is_missing", "last_successful_sync_at")
+    list_filter = ("is_missing", "computer_type", "state")
+    search_fields = ("external_id", "name", "inventory_number")
 
 
 @admin.register(ListViewPreference)

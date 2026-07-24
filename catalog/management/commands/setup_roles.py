@@ -6,7 +6,7 @@ class Command(BaseCommand):
     help = "Create the standard Service Catalog groups and permissions."
 
     def handle(self, *args, **options):
-        catalog_models = {"instancetype", "instance", "service", "servicemembership", "unitofmeasure", "servicemetriccategory", "actualservicemetric", "serverprofile", "glpiimportsession", "glpiimportpayload", "glpiimportcandidate"}
+        catalog_models = {"instancetype", "instance", "service", "servicemembership", "unitofmeasure", "servicemetriccategory", "actualservicemetric", "serverprofile", "glpiimportsession", "glpiimportpayload", "glpiimportcandidate", "glpicachesyncrun", "glpicachedlookup", "glpicachedcomputer", "glpicachedcomponent"}
         contract_models = {"contract", "contractserviceterm", "namedcontractposition", "contractlistimport", "contractactualsnapshot", "contractactualsnapshotservice", "contractactualsnapshotinstance"}
         specifications = {
             "Readers": (catalog_models | contract_models, {"view"}),

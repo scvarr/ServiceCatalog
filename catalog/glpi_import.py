@@ -160,6 +160,7 @@ def create_glpi_import(reference, user=None):
 @transaction.atomic
 def apply_glpi_candidates(session, candidate_ids, user):
     profile, _ = ServerProfile.objects.get_or_create(instance=session.instance)
+    managed_fields = set(profile.glpi_managed_fields or [])
     for candidate in session.candidates.filter(pk__in=candidate_ids, decision=GlpiImportCandidate.Decision.PENDING):
         converter = PROFILE_FIELDS.get(candidate.field_key)
         if not converter:
@@ -169,8 +170,10 @@ def apply_glpi_candidates(session, candidate_ids, user):
         except (InvalidOperation, TypeError, ValueError):
             continue
         setattr(profile, candidate.field_key, value)
+        managed_fields.add(candidate.field_key)
         candidate.decision = GlpiImportCandidate.Decision.APPLIED
         candidate.applied_at = timezone.now()
         candidate.applied_by = user
         candidate.save(update_fields=["decision", "applied_at", "applied_by", "updated_at"])
+    profile.glpi_managed_fields = sorted(managed_fields)
     profile.save()

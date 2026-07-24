@@ -8,7 +8,8 @@ from catalog.glpi_import import create_glpi_import, normalize_import_candidates
 from catalog.glpi_database import diagnostic_summary
 from catalog.glpi_sync import sync_glpi_reference
 from catalog.glpi_diagnostics import build_glpi_diagnostic_archive
-from catalog.models import ExternalReference, GlpiComputerSnapshot, GlpiImportPayload, GlpiImportSession, Instance, InstanceType
+from catalog.models import ExternalReference, GlpiCachedComputer, GlpiCachedComponent, GlpiComputerSnapshot, GlpiImportPayload, GlpiImportSession, Instance, InstanceType
+from catalog.glpi_cache import sync_glpi_cache
 
 
 class FakeResponse:
@@ -260,3 +261,45 @@ class GlpiImportTests(TestCase):
         client.get_computer_related_payload.return_value = []
         session = create_glpi_import(self.reference)
         self.assertEqual(GlpiImportPayload.objects.get(session=session, endpoint_key="processor").http_status, 403)
+
+
+class GlpiCacheTests(TestCase):
+    @staticmethod
+    def _configure_client(client, *, processor=None):
+        client.list_computers.return_value = [PAYLOAD]
+        client.list_dropdown.return_value = []
+        client.get_computer_component_payload.side_effect = lambda _, key: processor if key == "processor" else []
+        client.get_computer_related_payload.return_value = []
+
+    @patch("catalog.glpi_cache.get_glpi_client")
+    def test_full_cache_sync_keeps_api_component_and_marks_missing(self, get_client):
+        self._configure_client(get_client.return_value, processor=[{"processor": {"name": "Xeon"}, "nbcores": 4}])
+        run = sync_glpi_cache(component_workers=1, refresh_linked=False)
+        self.assertEqual(run.status, "completed")
+        computer = GlpiCachedComputer.objects.get(external_id="2713")
+        component = GlpiCachedComponent.objects.get(computer=computer, component_key="processor")
+        self.assertEqual(component.source, "api")
+        self.assertEqual(component.normalized_payload["core_count"], "4")
+        get_client.return_value.list_computers.return_value = []
+        sync_glpi_cache(component_workers=1, refresh_linked=False)
+        self.assertTrue(GlpiCachedComputer.objects.get(pk=computer.pk).is_missing)
+
+    @patch("catalog.glpi_cache.get_glpi_database_client")
+    @patch("catalog.glpi_cache.get_glpi_client")
+    def test_empty_processor_uses_database_batch_fallback(self, get_client, get_database_client):
+        self._configure_client(get_client.return_value, processor=[])
+        get_database_client.return_value.get_computer_processors_many.return_value = {"2713": [{"designation": "Xeon", "nbcores": 8}]}
+        run = sync_glpi_cache(component_workers=1, refresh_linked=False)
+        component = GlpiCachedComponent.objects.get(component_key="processor")
+        self.assertEqual(run.status, "completed")
+        self.assertEqual(component.source, "database")
+        get_database_client.return_value.get_computer_processors_many.assert_called_once_with(["2713"])
+
+    @patch("catalog.glpi_cache.get_glpi_database_client")
+    @patch("catalog.glpi_cache.get_glpi_client")
+    def test_component_error_does_not_use_database_fallback(self, get_client, get_database_client):
+        self._configure_client(get_client.return_value, processor=[])
+        get_client.return_value.get_computer_component_payload.side_effect = lambda _, key: (_ for _ in ()).throw(GlpiError("HTTP 403")) if key == "processor" else []
+        run = sync_glpi_cache(component_workers=1, refresh_linked=False)
+        self.assertEqual(run.status, "partial")
+        get_database_client.return_value.get_computer_processors_many.assert_not_called()

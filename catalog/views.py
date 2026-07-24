@@ -9,6 +9,8 @@ from .glpi_sync import sync_glpi_reference
 from .glpi_import import apply_glpi_candidates, create_glpi_import
 from .glpi_diagnostics import build_glpi_diagnostic_archive
 from .glpi_database import diagnostic_summary
+from .glpi_cache import create_instances_from_glpi_cache, sync_glpi_cache
+from .forms import GlpiCachedComputerImportForm, GlpiCacheFilterForm
 from .listing import (
     DEFAULT_PAGE_SIZE,
     GLPI_COMPUTER_COLUMNS,
@@ -23,7 +25,7 @@ from .listing import (
     query_string,
     visible_columns,
 )
-from .models import ActualServiceMetric, ExternalReference, GlpiImportSession, Instance, InstanceType, ListViewPreference, Service, ServiceMembership, ServiceMetricCategory
+from .models import ActualServiceMetric, ExternalReference, GlpiCacheSyncRun, GlpiCachedComputer, GlpiImportSession, Instance, InstanceType, ListViewPreference, Service, ServiceMembership, ServiceMetricCategory
 
 
 LIST_PARAMETERS = {
@@ -338,3 +340,56 @@ def sync_glpi_instance(request, pk):
         except GlpiError as exc:
             messages.error(request, f"Не удалось обновить данные GLPI: {exc}")
     return redirect("catalog:instance_detail", pk=pk)
+
+
+@permission_required("catalog.view_glpicachedcomputer", raise_exception=True)
+def glpi_cache_list(request):
+    filters = GlpiCacheFilterForm(request.GET or None)
+    computers = GlpiCachedComputer.objects.select_related("computer_type", "state", "location")
+    if filters.is_valid():
+        if not filters.cleaned_data.get("show_missing"):
+            computers = computers.filter(is_missing=False)
+        if filters.cleaned_data.get("computer_type"):
+            computers = computers.filter(computer_type__external_id=filters.cleaned_data["computer_type"])
+        if filters.cleaned_data.get("state"):
+            computers = computers.filter(state__external_id=filters.cleaned_data["state"])
+        if filters.cleaned_data.get("q"):
+            query = filters.cleaned_data["q"]
+            computers = computers.filter(Q(name__icontains=query) | Q(external_id__icontains=query) | Q(inventory_number__icontains=query))
+    references = ExternalReference.objects.filter(source_system=ExternalReference.SourceSystem.GLPI, external_object_type="Computer", external_id=OuterRef("external_id"))
+    computers = computers.annotate(is_linked=Exists(references))
+    page_obj, page_range = paginate(computers, request.GET.get("page"), normalize_page_size(request.GET.get("page_size"), DEFAULT_PAGE_SIZE))
+    selected = request.GET.getlist("selected")
+    latest_run = GlpiCacheSyncRun.objects.first()
+    return render(request, "catalog/glpi_cache_list.html", {"filter_form": filters, "page_obj": page_obj, "page_range": page_range, "latest_run": latest_run, "selected": selected, "import_form": GlpiCachedComputerImportForm(choices=[row.pk for row in page_obj if not row.is_linked]), "page_query": query_string(request.GET, ("computer_type", "state", "q", "show_missing", "page_size"), exclude=("page",))})
+
+
+@permission_required("catalog.change_glpicachedcomputer", raise_exception=True)
+def sync_glpi_cache_view(request):
+    if request.method == "POST":
+        run = sync_glpi_cache(requested_by=request.user)
+        if run.status == GlpiCacheSyncRun.Status.COMPLETED:
+            messages.success(request, "Кэш GLPI обновлён.")
+        elif run.status == GlpiCacheSyncRun.Status.PARTIAL:
+            messages.warning(request, "Кэш GLPI обновлён частично.")
+        else:
+            messages.error(request, "Не удалось обновить кэш GLPI.")
+    return redirect("catalog:glpi_cache_list")
+
+
+@permission_required("catalog.add_instance", raise_exception=True)
+def import_glpi_cached_computers(request):
+    if request.method != "POST":
+        return redirect("catalog:glpi_cache_list")
+    selected = request.POST.getlist("cached_computer_ids")
+    form = GlpiCachedComputerImportForm(request.POST, choices=selected)
+    if not form.is_valid():
+        messages.error(request, "Не удалось проверить выбранные компьютеры.")
+        return redirect("catalog:glpi_cache_list")
+    service = form.cleaned_data["service"]
+    if service and not request.user.has_perm("catalog.add_servicemembership"):
+        messages.error(request, "Недостаточно прав для добавления экземпляров в услугу.")
+        return redirect("catalog:glpi_cache_list")
+    report = create_instances_from_glpi_cache([int(value) for value in form.cleaned_data["cached_computer_ids"]], instance_type=form.cleaned_data["instance_type"], service=service, user=request.user)
+    messages.success(request, f"Создано экземпляров: {report['created']}; уже связанных: {report['already_linked']}.")
+    return redirect("catalog:glpi_cache_list")

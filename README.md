@@ -58,3 +58,15 @@ Compose создаёт именованную сеть `servicecatalog_net` (`17
 Для Nginx Proxy Manager на том же Docker-хосте подключите его контейнер к сети `servicecatalog_net` и укажите upstream `http://172.30.0.10:8000`. Внешний порт `8380` можно использовать для локальной диагностики; GUI на сервере для работы приложения не нужен.
 
 Статические файлы, включая стили Django Admin, раздаёт WhiteNoise внутри контейнера `web`; отдельный reverse proxy для них не требуется.
+
+## Массовая синхронизация GLPI
+
+Локальный кэш GLPI заполняется из API и отображается на странице «Кэш GLPI». При пустом корректном API-ответе для процессоров используется read-only MySQL fallback; ошибки API не подменяются данными БД.
+
+Для ручного запуска используйте кнопку на странице кэша либо команду:
+
+```text
+docker compose exec web python manage.py sync_glpi_cache
+```
+
+Для cron/systemd допускается `--fail-on-partial`; `--no-linked-instances` обновляет только кэш. Параметры страницы API, числа worker-потоков и SQL-блоков задаются `GLPI_API_PAGE_SIZE`, `GLPI_COMPONENT_WORKERS`, `GLPI_DB_BATCH_SIZE`.

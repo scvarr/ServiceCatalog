@@ -151,6 +151,12 @@ class GlpiClient:
     def get_computer_payload(self, computer_id: int | str) -> dict[str, Any]:
         return self._get_json(f"/Assets/Computer/{computer_id}", "компьютера", dict)
 
+    def list_computers(self, *, start: int = 0, limit: int = 100) -> list[dict[str, Any]]:
+        return self._get_json("/Assets/Computer", "списка компьютеров", list, params={"start": start, "limit": limit})
+
+    def list_dropdown(self, resource: str, *, start: int = 0, limit: int = 100) -> list[dict[str, Any]]:
+        return self._get_json(f"/Dropdowns/{resource}", f"справочника {resource}", list, params={"start": start, "limit": limit})
+
     def get_computer_component_payload(self, computer_id: int | str, component_key: str) -> list[dict[str, Any]]:
         component = self.COMPUTER_COMPONENTS[component_key]
         return self._get_json(f"/Assets/Computer/{computer_id}/Component/{component}", f"компонента {component}", list)
@@ -163,12 +169,13 @@ class GlpiClient:
         }
         return self._get_json(paths[resource_key], resource_key, list)
 
-    def _get_json(self, path: str, resource_name: str, expected_type: type):
+    def _get_json(self, path: str, resource_name: str, expected_type: type, *, params: dict[str, Any] | None = None):
         token = self._token()
         try:
             response = self.session.get(
                 f"{settings.GLPI_BASE_URL}/api.php/{settings.GLPI_API_VERSION}{path}",
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                params=params,
                 timeout=settings.GLPI_TIMEOUT_SECONDS, verify=self.verify,
             )
             response.raise_for_status()

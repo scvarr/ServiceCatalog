@@ -185,6 +185,7 @@ class ServerProfile(TimeStampedModel):
     commissioned_month = models.PositiveSmallIntegerField("месяц ввода", null=True, blank=True)
     commissioning_precision = models.CharField("точность даты ввода", max_length=16, choices=CommissioningPrecision, default=CommissioningPrecision.UNKNOWN)
     commissioning_comment = models.TextField("комментарий к дате ввода", blank=True)
+    glpi_managed_fields = models.JSONField("поля, управляемые GLPI", default=list, blank=True)
 
     class Meta:
         verbose_name = "паспорт сервера"
@@ -323,6 +324,109 @@ class GlpiComputerSnapshot(TimeStampedModel):
 
     def __str__(self):
         return self.external_name or str(self.reference)
+
+
+class GlpiCacheSyncRun(TimeStampedModel):
+    class Trigger(models.TextChoices):
+        MANUAL = "manual", "Вручную"
+        COMMAND = "command", "Командой"
+
+    class Status(models.TextChoices):
+        RUNNING = "running", "Выполняется"
+        COMPLETED = "completed", "Завершён"
+        PARTIAL = "partial", "Частично завершён"
+        FAILED = "failed", "Ошибка"
+
+    trigger = models.CharField("источник запуска", max_length=16, choices=Trigger, default=Trigger.MANUAL)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="requested_glpi_cache_syncs")
+    status = models.CharField("статус", max_length=16, choices=Status, default=Status.RUNNING)
+    started_at = models.DateTimeField("начат", null=True, blank=True)
+    finished_at = models.DateTimeField("завершён", null=True, blank=True)
+    full_computer_list_received = models.BooleanField("полный список компьютеров получен", default=False)
+    statistics = models.JSONField("статистика", default=dict, blank=True)
+    error_summary = models.TextField("сводка ошибок", blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class GlpiCachedLookup(TimeStampedModel):
+    class Kind(models.TextChoices):
+        COMPUTER_TYPE = "computer_type", "Тип компьютера"
+        STATE = "state", "Статус"
+        LOCATION = "location", "Местоположение"
+        MANUFACTURER = "manufacturer", "Производитель"
+        COMPUTER_MODEL = "computer_model", "Модель компьютера"
+        AUTO_UPDATE_SYSTEM = "auto_update_system", "Источник инвентаризации"
+
+    kind = models.CharField("вид справочника", max_length=32, choices=Kind.choices)
+    external_id = models.CharField("ID GLPI", max_length=64)
+    name = models.CharField("наименование", max_length=255, blank=True)
+    complete_name = models.CharField("полное наименование", max_length=500, blank=True)
+    raw_payload = models.JSONField("сырой JSON", default=dict, blank=True)
+    last_seen_run = models.ForeignKey(GlpiCacheSyncRun, on_delete=models.SET_NULL, null=True, blank=True, related_name="seen_lookups")
+    is_missing = models.BooleanField("отсутствует в последней выгрузке", default=False)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["kind", "external_id"], name="catalog_glpi_lookup_unique")]
+        indexes = [models.Index(fields=["kind", "is_missing", "name"], name="catalog_glpi_lookup_filter_idx")]
+        ordering = ["kind", "name"]
+
+    def __str__(self):
+        return self.name or self.external_id
+
+
+class GlpiCachedComputer(TimeStampedModel):
+    external_id = models.CharField("ID GLPI", max_length=64, unique=True)
+    name = models.CharField("имя", max_length=255, blank=True)
+    comment = models.TextField("комментарий", blank=True)
+    serial_number = models.CharField("серийный номер", max_length=255, blank=True)
+    inventory_number = models.CharField("инвентарный номер", max_length=255, blank=True)
+    external_uuid = models.CharField("UUID", max_length=255, blank=True)
+    computer_type = models.ForeignKey(GlpiCachedLookup, on_delete=models.SET_NULL, null=True, blank=True, related_name="computers_by_type", limit_choices_to={"kind": GlpiCachedLookup.Kind.COMPUTER_TYPE})
+    state = models.ForeignKey(GlpiCachedLookup, on_delete=models.SET_NULL, null=True, blank=True, related_name="computers_by_state", limit_choices_to={"kind": GlpiCachedLookup.Kind.STATE})
+    location = models.ForeignKey(GlpiCachedLookup, on_delete=models.SET_NULL, null=True, blank=True, related_name="computers_by_location", limit_choices_to={"kind": GlpiCachedLookup.Kind.LOCATION})
+    manufacturer = models.ForeignKey(GlpiCachedLookup, on_delete=models.SET_NULL, null=True, blank=True, related_name="computers_by_manufacturer", limit_choices_to={"kind": GlpiCachedLookup.Kind.MANUFACTURER})
+    model = models.ForeignKey(GlpiCachedLookup, on_delete=models.SET_NULL, null=True, blank=True, related_name="computers_by_model", limit_choices_to={"kind": GlpiCachedLookup.Kind.COMPUTER_MODEL})
+    auto_update_system = models.ForeignKey(GlpiCachedLookup, on_delete=models.SET_NULL, null=True, blank=True, related_name="computers_by_auto_update", limit_choices_to={"kind": GlpiCachedLookup.Kind.AUTO_UPDATE_SYSTEM})
+    external_created_at = models.DateTimeField(null=True, blank=True)
+    external_updated_at = models.DateTimeField(null=True, blank=True)
+    last_inventory_update = models.DateTimeField(null=True, blank=True)
+    last_boot = models.DateTimeField(null=True, blank=True)
+    raw_payload = models.JSONField("сырой JSON", default=dict, blank=True)
+    last_seen_run = models.ForeignKey(GlpiCacheSyncRun, on_delete=models.SET_NULL, null=True, blank=True, related_name="seen_computers")
+    last_successful_sync_at = models.DateTimeField(null=True, blank=True)
+    is_missing = models.BooleanField("отсутствует в последней выгрузке", default=False)
+    last_error = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["is_missing", "computer_type"], name="catalog_glpi_comp_type_idx"),
+            models.Index(fields=["is_missing", "state"], name="catalog_glpi_comp_state_idx"),
+            models.Index(fields=["name"], name="catalog_glpi_comp_name_idx"),
+        ]
+        ordering = ["name", "external_id"]
+
+    def __str__(self):
+        return self.name or self.external_id
+
+
+class GlpiCachedComponent(TimeStampedModel):
+    class Source(models.TextChoices):
+        API = "api", "GLPI API"
+        DATABASE = "database", "База GLPI"
+
+    computer = models.ForeignKey(GlpiCachedComputer, on_delete=models.CASCADE, related_name="components")
+    component_key = models.CharField(max_length=64)
+    payload = models.JSONField("сырой JSON", default=list, blank=True)
+    normalized_payload = models.JSONField("нормализованные данные", default=dict, blank=True)
+    source = models.CharField(max_length=16, choices=Source.choices, default=Source.API)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_successful_sync_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["computer", "component_key"], name="catalog_glpi_component_unique")]
 
 
 class GlpiImportSession(TimeStampedModel):
